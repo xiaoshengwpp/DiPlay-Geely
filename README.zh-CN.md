@@ -1,6 +1,10 @@
 # DiPlay-Geely · 吉利车机社区适配
 
-星越 L 2025 款（揽星）及吉利银河车型仍处于适配准备 / 未验证阶段，尚无本分支吉利适配 APK。上游支持范围不代表本 fork 的兼容性结论。
+本分支仅面向星越 L 2025 款（揽星），仍处于源码适配 / 未实车验证阶段。“银河车机”描述该目标车辆的系统背景，不代表支持银河品牌其他车型。上游支持范围不代表本 fork 的兼容性结论。
+
+版本沿用原始上游并增加适配序号：当前源码为 `0.2.7-geely.1`，标签为 `v0.2.7-geely.1`，Android versionCode 为 `26001`。可安装 APK 将统一通过[本仓库普通 GitHub Releases](https://github.com/xiaoshengwpp/DiPlay-Geely/releases)发布，不另设测试包渠道。**目前尚无可安装发布**，仍需由所有者安全提供既有、获授权的运行时认证资产和稳定签名输入；源码 CI 产物不能当作可安装包。
+
+安装名称为“DiPlay 星越 L”，独立包名为 `io.github.xiaoshengwpp.diplay.geely`；首次安装不会覆盖或自动迁移上游应用数据。后续本分支升级保持同包名、同签名并递增 versionCode。详见[版本、下载与安装说明](README.md#版本与下载)及[发布流程](docs/RELEASE.md)。发布本身不代表星越 L 兼容性已通过验证。
 
 请先阅读 [吉利问题反馈、日志导出与隐私指南](README.md#问题反馈与兼容性共建)，再到 [本仓库提交故障或兼容性议题](https://github.com/xiaoshengwpp/DiPlay-Geely/issues/new/choose)。安全停车后测试；公开前人工审查并脱敏日志、截图及录屏。
 

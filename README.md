@@ -1,17 +1,33 @@
 # DiPlay-Geely · 吉利车机社区适配
 
-本仓库直接 fork 自 [shihabal3amri/DiPlay](https://github.com/shihabal3amri/DiPlay)，面向 **吉利星越 L 2025 款及吉利银河车机**开展社区适配，欢迎车主、开发者和测试者一起共建。
+本仓库直接 fork 自 [shihabal3amri/DiPlay](https://github.com/shihabal3amri/DiPlay)，面向 **吉利星越 L 2025 款（揽星）**开展社区适配，欢迎车主、开发者和测试者一起共建。“银河车机”只描述该目标车辆的系统背景，不表示覆盖银河品牌其他车型。
 
-**当前阶段：适配准备中，尚未实车验证。** 目前仅建立 fork 和适配说明，尚未发布本分支的吉利适配 APK，也不声明任何车型已支持。上游主要支持 BYD；其兼容性结论不能直接套用于吉利。吉利银河不同车型、硬件和固件需要分别验证。
+**当前阶段：源码适配中，尚未实车验证。** 已在源码中隔离比亚迪专属能力并设置简体中文默认语言；尚未发布本分支的可安装 APK，也不声明任何车型已兼容。正式打包仍需所有者在私有构建环境安全提供既有、来源及授权明确的运行时认证资产和稳定 APK 签名输入。上游主要支持 BYD；其兼容性结论不能直接套用于星越 L。
 
-Community adaptation for Geely Xingyue L (2025) and Geely Galaxy head units. Experimental, not yet vehicle-tested; no verified Geely compatibility or adaptation release is claimed.
+Community adaptation for the Geely Xingyue L 2025 Lanxing trim only. Not yet vehicle-tested; no verified compatibility or installable release is claimed. Galaxy references describe this target's head-unit background, not support for other Galaxy models.
+
+## 版本与下载
+
+本分支沿用原始上游版本，只增加星越 L 适配小版本：当前源码版本为 **`0.2.7-geely.1`**，发布标签为 **`v0.2.7-geely.1`**。同一上游版本后续为 `.2`、`.3`；升级原始上游版本时，适配序号从 `.1` 重新开始。版本源为 [`gradle/geely-version.properties`](gradle/geely-version.properties)，不按日期、构建次数或分支名生成。
+
+- 可安装 APK 统一在[本仓库 GitHub Releases](https://github.com/xiaoshengwpp/DiPlay-Geely/releases)发布，使用普通 Release；`geely` 后缀表示适配分支，不强制标记 GitHub pre-release，也不另设“测试包”发布渠道
+- 发布包使用稳定签名与完整的获授权运行时输入；源码 CI 产物是无签名、无运行时认证的构建检查结果，不能当作可安装交付物
+- Android `versionCode = 原始上游 versionCode × 1000 + 适配序号`。当前上游为 `26`，所以本版为 `26001`；适配序号范围为 `1–999`。发布后不得重用版本号或替换同标签 APK；每次正式发布须确认代码值高于上一版
+- 普通 Release 是发布形式，不是兼容性认证。每版说明须列出已测 / 未测项目、目标车机固件与已知限制；目前所有实车连接、音频及交互验证仍为未测
+
+构建和发布步骤见 [BUILD](docs/BUILD.md) 与 [RELEASE](docs/RELEASE.md)。**目前没有已发布的本分支可安装 APK**；不要把上游下载链接或源码构建产物误当成本分支发布。
+
+### 安装与升级
+
+本分支独立包名为 `io.github.xiaoshengwpp.diplay.geely`，桌面名称为“DiPlay 星越 L”（其他语言为“DiPlay Geely”）。Kotlin / Java 命名空间仍保留上游，不影响独立安装。它可与使用不同包名的上游或中文 fork 并存；不要同时运行多个投屏应用争用 USB、音频或无线连接。
+
+第一次安装本分支会建立独立应用数据、权限和连接设置，**不会覆盖上游，也不会自动迁移其数据**。不要为了安装本分支先卸载旧应用。将来本分支之间升级须保持相同包名和签名证书，并使用更高的 `versionCode`；不能用新签名覆盖旧签名。开发用 debug 包仍独立隔离，不作为另一条用户发布渠道。所有安装和验证都在安全停车后进行。
 
 ## 兼容性记录
 
 | 目标车型 / 范围 | 车机硬件 / 固件 | 连接、音频及交互验证 | 状态 |
 | --- | --- | --- | --- |
 | 吉利星越 L 2025 款（揽星） | 待补充准确版本 | 尚未实测 | 适配准备中 / 未验证 |
-| 吉利银河车机（具体车型待补充） | 待按车型与版本分别记录 | 尚未实测 | 适配准备中 / 未验证 |
 
 不得以某一车型或固件的结果推断整个车系可用。仪表、HUD、方向盘按键和车辆数据等厂商专属功能均需单独验证。
 
@@ -19,11 +35,11 @@ Community adaptation for Geely Xingyue L (2025) and Geely Galaxy head units. Exp
 
 吉利相关问题请提交到 **[本仓库 Issues](https://github.com/xiaoshengwpp/DiPlay-Geely/issues)**，先搜索是否已有同车型、同固件问题，再选择 [故障反馈或兼容性记录](https://github.com/xiaoshengwpp/DiPlay-Geely/issues/new/choose)。已有议题可补充新版本与复现结果；不同问题请分开提交。文档修正和代码改进也欢迎 Pull Request。
 
-**所有连接测试、录屏、日志导出和设置变更都应在车辆安全停放时完成，驾驶中不要操作或排障。** 星越 L 2025 款（揽星）及银河车型仍处于适配准备 / 未验证阶段；个人测试通过只代表该车型、硬件、固件和应用版本的组合，不等于整个车系正式支持。上游 APK 和其他 fork 的结果请明确标注来源，不要当成本仓库已发布的吉利版本；本仓库尚无吉利适配 APK，默认源码构建不包含运行时 CarPlay 协议认证资产（与 APK 签名不同），也不能据此承诺可直接连接车辆。自行构建若提示认证不可用 / 无法开始连接，可能是构建缺少该组件，不能直接归因于吉利固件；请报告构建来源与提示，不要上传认证资产或密钥。
+**所有连接测试、录屏、日志导出和设置变更都应在车辆安全停放时完成，驾驶中不要操作或排障。** 星越 L 2025 款（揽星）仍处于适配准备 / 未验证阶段；个人测试通过只代表该车型、硬件、固件和应用版本的组合，不等于整个车系正式支持。上游 APK 和其他 fork 的结果请明确标注来源，不要当成本仓库已发布的吉利版本；本仓库尚无可安装发布，默认源码构建不包含运行时 CarPlay 协议认证资产（与 APK 签名不同），也不能据此承诺可直接连接车辆。自行构建若提示认证不可用 / 无法开始连接，可能是构建缺少该组件，不能直接归因于吉利固件；请报告构建来源与提示，不要上传认证资产或密钥。
 
 ### 1. 先记录现象与版本
 
-- 车型、年款、配置（例如星越 L 2025 款揽星；银河请写具体车型）
+- 车型、年款、配置（本分支目标为星越 L 2025 款揽星；其他车型的反馈不代表纳入支持范围）
 - 车机硬件 / 芯片、系统名称、完整固件版本、Android 版本；不知道的写“未知”，截图须遮盖个人信息
 - 应用版本、下载来源 / 发布页链接；自行构建请附仓库、分支和提交 SHA
 - iPhone 型号、完整 iOS 版本、测试日期、问题发生时间及时区
