@@ -37,6 +37,12 @@ object BydNavigationOutputs {
         if (GeelyVendorPolicy.bydBattery) BydBatteryStatus.also { it.start(context) }
         else com.shilapi.xcertplay.transport.VehicleStatusProvider { null }
 
+    /** The car's wheel speed and gear for the iPhone's dead reckoning; read over adb while asked for. */
+    fun wheelSpeed(context: Context): com.shilapi.xcertplay.transport.VehicleSpeedSource =
+        BydWheelSpeedSource.attach(context)
+    /** Whether the car is in P (read over adb), or null when it cannot tell. Blocking. */
+    fun parked(context: Context): Boolean? = BydParkedState.parked(context.applicationContext)
+
     fun start(context: Context) {
         if (!GeelyVendorPolicy.bydNavigation) return
         val app = context.applicationContext
