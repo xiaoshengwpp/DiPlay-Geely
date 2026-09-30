@@ -2,7 +2,6 @@ package com.shilapi.xcertplay
 
 import android.hardware.display.DisplayManager
 import android.view.Display
-import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -28,21 +27,21 @@ class ClusterMapPresentationTest {
         return id
     }
 
-    @Test fun legacyFirmwareKeepsOriginalBaseDisplayPreference() {
+    @Test fun geelyIgnoresBothBydBaseAndSharedDisplays() {
         val base = display("fission_bg_XDJAScreenProjection")
         val shared = display("shared_fission_bg_XDJAScreenProjection_0")
         try {
-            assertEquals(base, ClusterMapPresentation.findDisplay(context)?.displayId)
+            assertNull(ClusterMapPresentation.findDisplay(context))
         } finally {
             ShadowDisplayManager.removeDisplay(shared)
             ShadowDisplayManager.removeDisplay(base)
         }
     }
 
-    @Test fun baseDisplayStillWorksWhenNoSharedLayerExists() {
+    @Test fun geelyDoesNotSelectTheBydBaseDisplay() {
         val base = display("fission_bg_XDJAScreenProjection")
         try {
-            assertEquals(base, ClusterMapPresentation.findDisplay(context)?.displayId)
+            assertNull(ClusterMapPresentation.findDisplay(context))
         } finally {
             ShadowDisplayManager.removeDisplay(base)
         }
