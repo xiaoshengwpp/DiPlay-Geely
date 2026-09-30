@@ -3,6 +3,10 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+apply(from = rootProject.file("gradle/geely-version.gradle.kts"))
+val geelyVersionCode: Int by extra
+val geelyVersionName: String by extra
+
 // Optional local-only input. CI and ordinary source builds contain no accessory identity.
 val localAuthenticationAssets = providers.environmentVariable("DIPLAY_AUTH_ASSETS_DIR")
     .orNull?.let { file(it).canonicalFile }
@@ -14,11 +18,11 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.shihab.diplay"
+        applicationId = "io.github.xiaoshengwpp.diplay.geely"
         minSdk = 28
         targetSdk = 37
-        versionCode = 26
-        versionName = "0.2.7"
+        versionCode = geelyVersionCode
+        versionName = geelyVersionName
 
     }
 
@@ -98,14 +102,14 @@ val rejectBundledCredentials by tasks.registering {
 }
 tasks.named("preBuild") { dependsOn(rejectBundledCredentials) }
 
-// Car-test packages must be standalone. Keep ordinary source/CI builds identity-free.
+// Installable releases need explicit runtime inputs. Source/CI builds stay identity-free.
 val verifyStandaloneAuthentication by tasks.registering {
     group = "verification"
-    description = "Require the explicit runtime authentication input for a standalone car-test APK."
+    description = "Require the explicit runtime authentication input for a standalone APK."
     val directory = localAuthenticationAssets
     doLast {
         check(directory != null) {
-            "Standalone car builds require DIPLAY_AUTH_ASSETS_DIR; assembleDebug alone is source-only."
+            "Standalone builds require DIPLAY_AUTH_ASSETS_DIR; assembleDebug alone is source-only."
         }
         check(listOf("identity.pk8", "certificate.p7b").all {
             directory.resolve("offline-mfi/$it").let { file -> file.isFile && file.length() > 0 }
@@ -115,7 +119,7 @@ val verifyStandaloneAuthentication by tasks.registering {
 tasks.named("preBuild") { mustRunAfter(verifyStandaloneAuthentication) }
 tasks.register("assembleStandaloneDebug") {
     group = "build"
-    description = "Build a standalone car-test APK with explicitly provisioned authentication."
+    description = "Developer-only debug build with explicitly provisioned authentication; not a release channel."
     dependsOn(verifyStandaloneAuthentication, "assembleDebug")
 }
 
