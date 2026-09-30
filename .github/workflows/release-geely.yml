@@ -45,9 +45,12 @@ jobs:
       EXPECTED_SOURCE_SHA: ${{ inputs.source_sha }}
       EXPECTED_SIGNER_SHA256: ${{ inputs.signer_sha256 }}
       IDENTITY_ACKNOWLEDGEMENT: ${{ inputs.public_identity_acknowledgement }}
-      GRADLE_USER_HOME: ${{ runner.temp }}/geely-gradle
-      DIST: ${{ runner.temp }}/geely-dist
     steps:
+      - name: Initialize runner-local paths
+        run: |
+          set -eu
+          printf 'GRADLE_USER_HOME=%s/geely-gradle\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+          printf 'DIST=%s/geely-dist\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
       - name: Require explicit owner activation and disclosure
         env:
           RELEASE_ENABLED: ${{ vars.GEELY_RELEASE_ENABLED }}
