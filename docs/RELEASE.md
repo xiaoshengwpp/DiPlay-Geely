@@ -22,10 +22,8 @@ The Geely application installs alongside upstream DiPlay. It cannot replace upst
 
 Use the normal GitHub-hosted workflow. No separate private builder is required.
 
-1. Have the existing, authorized runtime `identity.pk8` and `certificate.p7b`, an existing backed-up Android signing keystore, and its passwords/alias ready on your own computer. Do not obtain these by extracting somebody else's APK. The project does not supply or generate those credentials. Independently record the signing certificate's public SHA-256 fingerprint.
+1. The owner-dispatched workflow downloads the official upstream APK pinned in `gradle/official-apk.json`, verifies its mandatory SHA-256, and prepares the two runtime identity files automatically in a temporary directory. You do not prepare or upload authentication files or authentication secrets. Review the upstream experimental-identity notice and public exposure below before dispatch. Separately, prepare an existing backed-up Android signing keystore and its passwords/alias, and record its public signing-certificate SHA-256 fingerprint. The workflow does not generate or replace your signing identity.
 2. In this repository's GitHub Settings, create the `geely-release` environment, restrict it to the protected `main` branch, and configure any available required-reviewer protection. Personally enter the following environment secrets through GitHub's secure interface. Uploading them gives this release workflow ongoing access; never put their values in a commit, issue, chat, dispatch input, build log or ordinary CI configuration:
-   - `DIPLAY_AUTH_IDENTITY_BASE64`: single-line Base64 of the existing runtime `identity.pk8`
-   - `DIPLAY_AUTH_CERTIFICATE_BASE64`: single-line Base64 of the corresponding `certificate.p7b`
    - `ANDROID_KEYSTORE_BASE64`: single-line Base64 of the existing signing keystore
    - `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`
    - Set the environment variable `GEELY_RELEASE_ENABLED` to `true` only after reviewing the workflow and the disclosure below. This is an Actions configuration variable, not another secret
@@ -35,7 +33,7 @@ Use the normal GitHub-hosted workflow. No separate private builder is required.
    - The expected **public signing-certificate SHA-256 fingerprint**, never a private key or password
    - `PUBLISH-EXTRACTABLE-IDENTITY` in the acknowledgement field
 
-Only the repository owner's dispatch or rerun can execute the job. The selected SHA must match the workflow's exact `main` commit. The workflow requires existing inputs; it never generates an Android key, imports credentials from another APK, configures secrets, or activates itself. Without these owner steps it fails closed. An assistant may prepare and review this source; the credential-entry and release-dispatch steps remain with the owner.
+Only the repository owner's dispatch or rerun can execute the job. The selected SHA must match the workflow's exact `main` commit. The workflow requires existing Android signing inputs. After the owner personally dispatches it, it downloads only the reviewed official APK and extracts only its two authentication entries after validating the complete APK digest. It never generates an Android signing key, configures secrets, or activates itself. Without these owner steps it fails closed. An assistant may prepare and review this source; the credential-entry and release-dispatch steps remain with the owner.
 
 ### Public identity disclosure
 
@@ -43,7 +41,7 @@ The standalone APK intentionally embeds the runtime accessory private key and ce
 
 ## What the workflow checks and publishes
 
-Before credentials are loaded, the job checks the public source tree, version policy, release history, offline regression contracts, unit tests and release lint, and produces an unsigned identity-free debug build. It then builds `:mobile:assembleStandaloneRelease` using the existing environment inputs. Authentication/signing files are temporary, outside the source tree. The credential-bearing build log stays temporary and is removed instead of uploaded; caching, configuration-cache, build-cache, daemon reuse and Actions APK artifact upload are disabled on this path.
+Before credentials are loaded, the job checks the public source tree, version policy, release history, offline regression contracts, unit tests and release lint, and produces an unsigned identity-free debug build. It then downloads and hash-checks the pinned official APK, automatically prepares its runtime identity, and builds `:mobile:assembleStandaloneRelease` using the existing Android signing inputs. Authentication/signing files are temporary, outside the source tree. The credential-bearing build log stays temporary and is removed instead of uploaded; caching, configuration-cache, build-cache, daemon reuse and Actions APK artifact upload are disabled on this path.
 
 APK verification checks:
 
@@ -64,3 +62,11 @@ The workflow creates a new tag atomically and stages four assets in a draft rele
 There are no tag deletions, force pushes, asset replacements, or release overwrites. Existing releases, drafts and tags cannot be reused. If a run fails after tag/draft creation, it deliberately leaves that state for the owner to inspect. Do not delete/recreate a published version to retry; resolve the failure and use the next Geely revision. An incomplete draft reserves its version but is not used as the previous published APK/signing baseline; its presence does not require deleting it to publish a higher revision. A success report requires a non-draft, non-prerelease result with all four matching assets.
 
 For local source and owner-controlled packaging commands, see [BUILD.md](BUILD.md). GitHub's [workflow dispatch documentation](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#workflow_dispatch), [release CLI reference](https://cli.github.com/manual/gh_release_create), and Android's [APK signature verification documentation](https://developer.android.com/tools/apksigner) describe the underlying tools.
+
+## Official runtime identity source
+
+The provisioning approach follows [DiPlay-CN](https://github.com/serein-morii/DiPlay-CN/blob/045d90644d6cfaf54cb6ae8ffdccd2f90b95f057/.github/workflows/release.yml). The currently reviewed input is official DiPlay v0.2.7, SHA-256 `27b434462da7e78b1ff0987d129ed0a4b0a0e56beceaf8ec221d47150d4675bd`, matching the official GitHub release asset metadata. An upstream version change requires reviewing and updating this public URL and digest; mismatches stop the release. There is no unpinned “latest” fallback.
+
+`prepare_official_identity.py` refuses a wrong checksum, missing/empty/duplicate/oversized entries, existing output directories, and output under source control. It does not print credential values. Source CI validates public metadata and runs only synthetic ZIP tests; it does not download the official APK or process real credentials. The successful offline checks do not establish that the real provisioning or signed release was executed.
+
+Upstream's [experimental authentication notice](https://github.com/shihabal3amri/DiPlay/blob/11dc9581df5323170e8033efb6f6b318857a5c81/docs/THIRD_PARTY_NOTICES.md#experimental-authentication-data) distinguishes the bundled identity from the source-code license and leaves broad distribution suitability unresolved. This automation does not create new authorization or prove iPhone acceptance.

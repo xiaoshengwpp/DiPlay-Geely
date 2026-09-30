@@ -31,7 +31,7 @@ python3 scripts/geely_version.py --gradle-metadata mobile/build/outputs/geely/ve
 
 ## Normal standalone release
 
-The owner-dispatched GitHub workflow builds and publishes a normal, signed APK to public Releases using existing owner-provisioned inputs. It is documented in [RELEASE.md](RELEASE.md). Ordinary pushes remain source-only checks. No package is published merely by committing the workflow.
+The owner-dispatched GitHub workflow builds and publishes a normal, signed APK to public Releases using automatically prepared pinned official runtime identity and existing owner-provisioned Android signing inputs. It is documented in [RELEASE.md](RELEASE.md). Ordinary pushes remain source-only checks. No package is published merely by committing the workflow.
 
 The same normal release can be built locally after the owner securely supplies these existing inputs outside the source tree:
 
@@ -39,7 +39,7 @@ The same normal release can be built locally after the owner securely supplies t
 - `ANDROID_KEYSTORE_PATH`: an existing, backed-up Android signing keystore
 - `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`: the values for that same existing signing identity
 
-Never commit these values/files or send them in chat. Secure provisioning is separate from source review. The build does not download or extract identities from another APK, generate a signing key, save secrets to a service, or publish a release.
+Never commit these values/files or send them in chat. Secure provisioning is separate from source review. Direct Gradle builds use the supplied local paths and do not download identities, generate signing keys, save secrets, or publish. The separate owner-dispatched GitHub release workflow automatically downloads and validates the pinned official APK, prepares its runtime identity, and publishes only after the owner acknowledgement; see RELEASE.md.
 
 ```sh
 ./gradlew --no-daemon --no-configuration-cache --no-build-cache :mobile:assembleStandaloneRelease
