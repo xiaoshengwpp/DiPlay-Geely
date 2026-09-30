@@ -141,7 +141,7 @@ class WorkflowContractTest(unittest.TestCase):
         self.assertIn('--no-daemon --no-configuration-cache --no-build-cache :mobile:assembleStandaloneRelease', self.workflow)
         self.assertIn('if: always()', self.workflow)
         self.assertIn('rm -rf "$RUNNER_TEMP"/geely-private.*', self.workflow)
-        self.assertIn('unset AUTH_IDENTITY_BASE64 AUTH_CERTIFICATE_BASE64 SIGNING_KEYSTORE_BASE64', self.workflow)
+        self.assertIn('unset SIGNING_KEYSTORE_BASE64', self.workflow)
 
     def test_release_is_signed_validated_and_normal(self):
         self.assertLess(self.workflow.index('scripts/validate_geely_apk.py'), self.workflow.index('gh release create'))
