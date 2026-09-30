@@ -86,7 +86,7 @@ class OfficialIdentityTests(unittest.TestCase):
         self.assertIn("--check-metadata", workflow)
         for old_secret in ("DIPLAY_AUTH_IDENTITY_BASE64", "DIPLAY_AUTH_CERTIFICATE_BASE64"):
             self.assertNotIn(old_secret, workflow)
-        for sensitive in ("--owner-approved-provisioning", "curl ", "secrets."):
+        for sensitive in ("--owner-approved-provisioning", "DiPlay/releases/download/", "--apk ", "secrets."):
             self.assertNotIn(sensitive, ci)
 
 

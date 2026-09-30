@@ -132,6 +132,16 @@ class WorkflowContractTest(unittest.TestCase):
                       'test "$EXPECTED_SOURCE_SHA" = "$GITHUB_SHA"', 'cancel-in-progress: false'):
             self.assertIn(guard, self.workflow)
 
+    def test_runner_context_is_not_used_in_job_level_env(self):
+        # GitHub evaluates job env before a runner is available. YAML parsing
+        # alone cannot catch this Actions expression-context error.
+        job_env = self.workflow.split('    env:\n', 1)[1].split('    steps:', 1)[0]
+        self.assertNotIn('${{ runner.', job_env)
+        self.assertIn("printf 'GRADLE_USER_HOME=%s/geely-gradle\\n'", self.workflow)
+        self.assertIn("printf 'DIST=%s/geely-dist\\n'", self.workflow)
+        self.assertLess(self.workflow.index('name: Initialize runner-local paths'),
+                        self.workflow.index('name: Require explicit owner activation'))
+
     def test_no_credential_generation_caches_automatic_artifact_uploads_or_overwrites(self):
         for forbidden in ('keytool', 'generateKeyPair', 'build-beta.py', 'actions/cache', 'setup-gradle',
                           'upload-artifact', 'download-artifact', 'gh secret set', '--clobber', '--force',
@@ -164,6 +174,8 @@ class WorkflowContractTest(unittest.TestCase):
         self.assertNotIn('release create', ci)
         self.assertIn('-I scripts/source-only.init.gradle', ci)
         self.assertIn('contents: read', ci)
+        self.assertIn('Validate GitHub Actions expression contexts', ci)
+        self.assertIn('"$tool_dir/actionlint" -shellcheck= -pyflakes=', ci)
 
 
 if __name__ == '__main__':
