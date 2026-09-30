@@ -18,7 +18,7 @@ on:
         required: true
         type: string
       public_identity_acknowledgement:
-        description: 'Type PUBLISH-EXTRACTABLE-IDENTITY to confirm the APK exposes its bundled runtime private key publicly'
+        description: 'Type PUBLISH-EXTRACTABLE-IDENTITY to approve official-APK identity provisioning and public exposure'
         required: true
         type: string
 
@@ -98,6 +98,8 @@ jobs:
           validate_previous_manifest(json.loads((temp / 'geely-version.json').read_text()), json.loads((temp / 'geely-previous-release/release-manifest.json').read_text()), os.environ['EXPECTED_SIGNER_SHA256'])
           PYVERIFY
           fi
+          python3 scripts/prepare_official_identity.py --check-metadata > "$RUNNER_TEMP/official-apk.json"
+          python3 scripts/test_official_identity.py
           python3 scripts/test_geely_version.py
           python3 scripts/test_geely_release_contract.py
           python3 scripts/test_standalone_build_contract.py
@@ -113,10 +115,8 @@ jobs:
         run: ./gradlew -I scripts/source-only.init.gradle --no-daemon --no-configuration-cache --no-build-cache :shared:testDebugUnitTest :common:testDebugUnitTest :mobile:lintRelease :mobile:assembleDebug :mobile:writeGeelyVersionMetadata
       - name: Compare Gradle and release version metadata
         run: python3 scripts/geely_version.py --tag "$RELEASE_TAG" --gradle-metadata mobile/build/outputs/geely/version.json > /dev/null
-      - name: Build with existing owner-provisioned inputs and verify APK
+      - name: Provision pinned official identity, build with owner signing inputs and verify APK
         env:
-          AUTH_IDENTITY_BASE64: ${{ secrets.DIPLAY_AUTH_IDENTITY_BASE64 }}
-          AUTH_CERTIFICATE_BASE64: ${{ secrets.DIPLAY_AUTH_CERTIFICATE_BASE64 }}
           SIGNING_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
@@ -138,8 +138,6 @@ jobs:
                   if not os.environ.get(name, '').strip():
                       raise ValueError('missing input')
               files = {
-                  'AUTH_IDENTITY_BASE64': Path(os.environ['DIPLAY_AUTH_ASSETS_DIR']) / 'offline-mfi/identity.pk8',
-                  'AUTH_CERTIFICATE_BASE64': Path(os.environ['DIPLAY_AUTH_ASSETS_DIR']) / 'offline-mfi/certificate.p7b',
                   'SIGNING_KEYSTORE_BASE64': Path(os.environ['ANDROID_KEYSTORE_PATH']),
               }
               for name, destination in files.items():
@@ -153,7 +151,14 @@ jobs:
               print('Existing release inputs are missing or invalid. Owner setup is required; no secrets were printed.', file=sys.stderr)
               sys.exit(1)
           PY
-          unset AUTH_IDENTITY_BASE64 AUTH_CERTIFICATE_BASE64 SIGNING_KEYSTORE_BASE64
+          unset SIGNING_KEYSTORE_BASE64
+          # Public source metadata is pinned and must match the upstream version.
+          official_url=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["url"])' "$RUNNER_TEMP/official-apk.json")
+          curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --retry 2 --max-time 180 \
+            --output "$private_dir/official.apk" "$official_url"
+          python3 scripts/prepare_official_identity.py --apk "$private_dir/official.apk" \
+            --destination "$DIPLAY_AUTH_ASSETS_DIR" --owner-approved-provisioning
+          rm "$private_dir/official.apk"
           if ! ./gradlew --no-daemon --no-configuration-cache --no-build-cache :mobile:assembleStandaloneRelease > "$private_dir/build.log" 2>&1; then
             echo 'Standalone release build failed. Private build diagnostics were not uploaded; reproduce locally with the existing owner inputs.'; exit 1
           fi

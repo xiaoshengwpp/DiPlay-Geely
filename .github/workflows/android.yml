@@ -26,6 +26,8 @@ jobs:
         run: |
           python3 scripts/test_standalone_build_contract.py
           python3 scripts/test_geely_version.py
+          python3 scripts/prepare_official_identity.py --check-metadata
+          python3 scripts/test_official_identity.py
           python3 scripts/test_geely_release_contract.py
           python3 scripts/test_geely_vendor_boundary.py
       - name: Unit tests, lint and unsigned source-only debug build
