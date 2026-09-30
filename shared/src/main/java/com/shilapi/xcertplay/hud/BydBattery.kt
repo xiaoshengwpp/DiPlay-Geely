@@ -89,6 +89,7 @@ internal object BydBatteryStatus : VehicleStatusProvider {
 
     @Synchronized
     fun start(appContext: Context) {
+        if (!GeelyVendorPolicy.bydBattery) return
         context = appContext.applicationContext
         askedMillis = now()
         if (started) {
@@ -101,6 +102,7 @@ internal object BydBatteryStatus : VehicleStatusProvider {
     }
 
     override fun snapshot(): VehicleStatusSnapshot? {
+        if (!GeelyVendorPolicy.bydBattery) return null
         askedMillis = now()
         val app = context ?: return null
         return cache.snapshot(BydOutputSettings.lowChargePercent(app))
@@ -116,6 +118,7 @@ internal object BydBatteryStatus : VehicleStatusProvider {
 
     /** Publish a settings check before telling the user that the battery is ready. No ADB I/O. */
     fun accept(appContext: Context, reading: BydBatteryReading) {
+        if (!GeelyVendorPolicy.bydBattery) return
         context = appContext.applicationContext
         if (cache.accept(reading)) {
             Log.i(TAG, "battery ${reading.percent} % range ${reading.rangeKm} km ${reading.remainingKwh} kWh charging=${reading.charging}")

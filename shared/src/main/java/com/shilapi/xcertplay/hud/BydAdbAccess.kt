@@ -6,7 +6,7 @@ import com.shilapi.xcertplay.adb.LocalAdb
 
 /** What the settings page shows about the ADB link that DiPlay's optional BYD features need. */
 object BydAdbAccess {
-    enum class State { READY, NOT_APPROVED, ADB_OFF, PAIRING_ONLY }
+    enum class State { READY, NOT_APPROVED, ADB_OFF, PAIRING_ONLY, DISABLED_FOR_VEHICLE }
 
     class Status(
         val state: State,
@@ -18,6 +18,7 @@ object BydAdbAccess {
 
     /** Blocking: run off the main thread. [mayAsk] lets the car show its approval dialog for DiPlay's key. */
     fun check(context: Context, mayAsk: Boolean): Status {
+        if (!GeelyVendorPolicy.bydAdb) return Status(State.DISABLED_FOR_VEHICLE)
         LocalAdb(AdbKeys.load(context)).use { adb ->
             val state = when (adb.connect(mayAsk)) {
                 LocalAdb.Access.READY -> State.READY
@@ -32,6 +33,7 @@ object BydAdbAccess {
 
     /** Read and publish the same battery data that the settings page reports as ready. */
     internal fun readStatus(context: Context, shell: (String) -> String?): Status {
+        if (!GeelyVendorPolicy.bydAdb) return Status(State.DISABLED_FOR_VEHICLE)
         val mode = BydClusterNaviMode.parseRead(shell(BydClusterNaviMode.READ_COMMAND))
         val battery = BydBattery.read(shell)
         battery?.let { BydBatteryStatus.accept(context, it) }

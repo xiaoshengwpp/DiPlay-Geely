@@ -26,6 +26,7 @@ object BydStarterBridge {
     private var lastNotice: String? = null
 
     @Synchronized fun initialize(context: Context) {
+        if (!GeelyVendorPolicy.bydDiagnostics) return
         if (context.packageName !in setOf("com.andrerinas.headunitrevived.bydhudtest", "com.shihab.diplay.hudtest") || started) return
         val saved = context.getSharedPreferences("hud_starter", Context.MODE_PRIVATE).getString("token", null)
         token = decodeToken(saved)
@@ -36,6 +37,7 @@ object BydStarterBridge {
     }
 
     @Synchronized fun configure(context: Context, secret: String) {
+        if (!GeelyVendorPolicy.bydDiagnostics) return
         check(context.packageName in setOf("com.andrerinas.headunitrevived.bydhudtest", "com.shihab.diplay.hudtest"))
         val parsed = requireNotNull(decodeToken(secret)) { "Invalid starter token" }
         context.getSharedPreferences("hud_starter", Context.MODE_PRIVATE).edit().putString("token", secret).apply()
@@ -56,12 +58,14 @@ object BydStarterBridge {
 
     /** Called only by the DUMP-protected debug receiver after the parked-demo request. */
     fun demonstrate(context: Context) {
+        if (!GeelyVendorPolicy.bydDiagnostics) return
         initialize(context)
         demoStartMs = SystemClock.elapsedRealtime()
         Log.i(TAG, "Parked demo requested: left 500m, right 800m, then clear")
     }
 
     private fun tick() {
+        if (!GeelyVendorPolicy.bydDiagnostics) return
         try {
             val now = SystemClock.elapsedRealtime()
             val demo = demoStartMs

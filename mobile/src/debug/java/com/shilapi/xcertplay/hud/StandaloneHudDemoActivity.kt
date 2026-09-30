@@ -118,6 +118,7 @@ class StandaloneHudDemoActivity : Activity() {
     }
 
     private fun transmit(packet: String) {
+        if (!GeelyVendorPolicy.bydDiagnostics) return
         sendBroadcast(Intent("byd.hud.NAVIGATION_DEMO").setComponent(target)
             .putExtra("normal", packet).addFlags(Intent.FLAG_RECEIVER_FOREGROUND))
     }

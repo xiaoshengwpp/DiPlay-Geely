@@ -8,8 +8,6 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
-import org.robolectric.shadows.ShadowSystemClock
-import java.time.Duration
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], manifest = Config.NONE)
@@ -23,40 +21,14 @@ class BydBatteryReadinessTest {
     )
 
     @Test
-    fun delayedAdbApprovalPrimesTheNextConnectionFromTheSettingsCheck() {
-        val unavailable = BydAdbAccess.readStatus(context) { null }
+    fun geelyProfileDoesNotReadOrPublishBydBatteryStatus() {
+        val unavailable = BydAdbAccess.readStatus(context) { error("No BYD shell read is allowed") }
+        assertEquals(BydAdbAccess.State.DISABLED_FOR_VEHICLE, unavailable.state)
         assertNull(unavailable.batteryPercent)
-        assertFalse(identification.withVehicleStatusFrom(BydBatteryStatus).vehicleStatusEnabled)
-
-        // A successful settings check after approval must prime the provider, not just its label.
-        val ready = BydAdbAccess.readStatus(context) { command ->
-            val bits = when (command.substringAfterLast(' ')) {
-                "1246777400" -> "41c80000"
-                "1246765118" -> "00000096"
-                "882901008" -> "41c8cccd"
-                "876609560" -> "0000000f"
-                else -> "00000003"
-            }
-            "Result: Parcel(00000000 $bits   '........')"
-        }
-        assertEquals(25.0, ready.batteryPercent!!, 0.001)
-        assertTrue(identification.withVehicleStatusFrom(BydBatteryStatus).vehicleStatusEnabled)
-        assertEquals(150, BydBatteryStatus.snapshot()!!.rangeKm)
-        reconnectAfterIdleRefreshesWithoutWaitingForThePeriodicTick()
-    }
-
-    private fun reconnectAfterIdleRefreshesWithoutWaitingForThePeriodicTick() {
-        BydBatteryStatus.readBattery = { reading }
-        ShadowSystemClock.advanceBy(Duration.ofMinutes(4))
+        BydBatteryStatus.accept(context, reading)
         BydBatteryStatus.start(context)
-        awaitReading()
-        ShadowSystemClock.advanceBy(Duration.ofMinutes(4))
         assertNull(BydBatteryStatus.snapshot())
         assertFalse(identification.withVehicleStatusFrom(BydBatteryStatus).vehicleStatusEnabled)
-
-        BydBatteryStatus.start(context)
-        awaitReading()
-        assertTrue(identification.withVehicleStatusFrom(BydBatteryStatus).vehicleStatusEnabled)
     }
 
     @Test
@@ -72,9 +44,4 @@ class BydBatteryReadinessTest {
         assertEquals(100_400L, fresh.maxChargeWh)
     }
 
-    private fun awaitReading() {
-        val deadline = System.nanoTime() + 2_000_000_000L
-        while (BydBatteryStatus.snapshot() == null && System.nanoTime() < deadline) Thread.sleep(5)
-        assertNotNull("refresh should complete before the 30-second periodic tick", BydBatteryStatus.snapshot())
-    }
 }
