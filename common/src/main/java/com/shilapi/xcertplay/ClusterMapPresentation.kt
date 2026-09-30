@@ -1,5 +1,7 @@
 package com.shilapi.xcertplay
 
+import com.shilapi.xcertplay.hud.GeelyVendorPolicy
+
 import android.app.Presentation
 import android.content.Context
 import android.graphics.Color
@@ -136,6 +138,7 @@ internal class ClusterMapPresentation(
 
         /** A verified 5.1 profile chooses its layer explicitly; other firmware keeps PR #5 behavior. */
         fun findDisplay(context: Context, theme: DiLink51ClusterLayout.Theme = DiLink51ClusterLayout.theme(context)): Display? {
+        if (!GeelyVendorPolicy.bydCluster) return null
             val displays = context.getSystemService(DisplayManager::class.java)
                 ?.getDisplays(DisplayManager.DISPLAY_CATEGORY_PRESENTATION) ?: return null
             val name = DiLink51ClusterLayout.displayName(

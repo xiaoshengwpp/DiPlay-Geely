@@ -19,18 +19,21 @@ object BydOutputSettings {
     const val DEFAULT_LOW_CHARGE_PERCENT = 20
     val lowChargePresets = listOf(10, 15, 20, 25, 30)
 
-    fun enabled(context: Context): Boolean = prefs(context).getBoolean(KEY_ENABLED, true)
+    fun enabled(context: Context): Boolean =
+        GeelyVendorPolicy.bydNavigation && prefs(context).getBoolean(KEY_ENABLED, true)
 
     fun setEnabled(context: Context, enabled: Boolean) = prefs(context).edit().putBoolean(KEY_ENABLED, enabled).apply()
 
     /** Ask the iPhone to stop drawing the cluster map while the cluster hides it (needs ADB over network). */
-    fun clusterStreamPause(context: Context): Boolean = prefs(context).getBoolean(KEY_CLUSTER_STREAM_PAUSE, false)
+    fun clusterStreamPause(context: Context): Boolean =
+        GeelyVendorPolicy.bydCluster && prefs(context).getBoolean(KEY_CLUSTER_STREAM_PAUSE, false)
 
     fun setClusterStreamPause(context: Context, enabled: Boolean) =
         prefs(context).edit().putBoolean(KEY_CLUSTER_STREAM_PAUSE, enabled).apply()
 
     /** Tell the iPhone the car's charge and range (needs ADB over network); applies on the next connection. */
-    fun batteryToIphone(context: Context): Boolean = prefs(context).getBoolean(KEY_BATTERY_TO_IPHONE, false)
+    fun batteryToIphone(context: Context): Boolean =
+        GeelyVendorPolicy.bydBattery && prefs(context).getBoolean(KEY_BATTERY_TO_IPHONE, false)
 
     fun setBatteryToIphone(context: Context, enabled: Boolean) =
         prefs(context).edit().putBoolean(KEY_BATTERY_TO_IPHONE, enabled).apply()
@@ -63,7 +66,8 @@ object BydOutputSettings {
 
     /** Whether the head unit has a BYD navigation receiver, so settings can hide a switch that cannot work. */
     fun available(context: Context): Boolean =
-        BydStandaloneHudOutput.available(context) || installed(context, "com.byd.amapservice") || installed(context, "com.ts.car.someip.service")
+        GeelyVendorPolicy.bydNavigation &&
+            (BydStandaloneHudOutput.available(context) || installed(context, "com.byd.amapservice") || installed(context, "com.ts.car.someip.service"))
 
     private fun installed(context: Context, pkg: String): Boolean =
         runCatching { context.packageManager.getPackageInfo(pkg, 0) }.isSuccess

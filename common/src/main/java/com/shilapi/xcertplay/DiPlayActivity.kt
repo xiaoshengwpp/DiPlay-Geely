@@ -2,6 +2,7 @@
 // UI copy and visual language adapted from DiAuto. See docs/THIRD_PARTY_NOTICES.md.
 package com.shilapi.xcertplay
 
+
 import android.Manifest
 import android.app.AlertDialog
 import android.bluetooth.BluetoothManager
@@ -777,6 +778,7 @@ class DiPlayActivity : ComponentActivity() {
         BydAdbAccess.State.NOT_APPROVED -> getString(R.string.adb_not_approved)
         BydAdbAccess.State.ADB_OFF -> getString(R.string.adb_off)
         BydAdbAccess.State.PAIRING_ONLY -> getString(R.string.adb_pairing_only)
+        BydAdbAccess.State.DISABLED_FOR_VEHICLE -> getString(R.string.byd_integration_disabled_geely)
     }
 
     private fun hasPreciseLocation() =

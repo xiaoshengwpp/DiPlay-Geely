@@ -1,0 +1,15 @@
+// Opt-in source verification only. No runtime credentials or debug signing key.
+def privateInputNames = [
+    'DIPLAY_AUTH_ASSETS_DIR', 'ANDROID_KEYSTORE_PATH', 'ANDROID_KEYSTORE_PASSWORD',
+    'ANDROID_KEY_ALIAS', 'ANDROID_KEY_PASSWORD',
+]
+if (privateInputNames.any { System.getenv(it)?.trim() }) {
+    throw new GradleException('Source-only verification requires all authentication/signing inputs to be unset')
+}
+gradle.beforeProject { project ->
+    project.plugins.withId('com.android.application') {
+        project.extensions.getByName('androidComponents').finalizeDsl { android ->
+            android.buildTypes.getByName('debug').signingConfig = null
+        }
+    }
+}

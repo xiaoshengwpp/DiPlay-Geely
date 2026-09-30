@@ -1,0 +1,240 @@
+name: Publish normal Geely release (owner only)
+
+# Deliberately no push, tag, pull_request, schedule or workflow_run trigger.
+# The owner must provision existing credentials and personally dispatch this job.
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Exact new tag from gradle/geely-version.properties (e.g. v0.2.7-geely.1)'
+        required: true
+        type: string
+      source_sha:
+        description: 'Full reviewed main commit SHA to build and tag'
+        required: true
+        type: string
+      signer_sha256:
+        description: 'Expected PUBLIC Android signing certificate SHA-256 fingerprint'
+        required: true
+        type: string
+      public_identity_acknowledgement:
+        description: 'Type PUBLISH-EXTRACTABLE-IDENTITY to approve official-APK identity provisioning and public exposure'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+concurrency:
+  group: geely-public-release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    if: >-
+      github.repository == 'xiaoshengwpp/DiPlay-Geely' &&
+      github.actor == github.repository_owner &&
+      github.triggering_actor == github.repository_owner &&
+      github.ref == 'refs/heads/main'
+    environment: geely-release
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+    env:
+      RELEASE_TAG: ${{ inputs.release_tag }}
+      EXPECTED_SOURCE_SHA: ${{ inputs.source_sha }}
+      EXPECTED_SIGNER_SHA256: ${{ inputs.signer_sha256 }}
+      IDENTITY_ACKNOWLEDGEMENT: ${{ inputs.public_identity_acknowledgement }}
+    steps:
+      - name: Initialize runner-local paths
+        run: |
+          set -eu
+          printf 'GRADLE_USER_HOME=%s/geely-gradle\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+          printf 'DIST=%s/geely-dist\n' "$RUNNER_TEMP" >> "$GITHUB_ENV"
+      - name: Require explicit owner activation and disclosure
+        env:
+          RELEASE_ENABLED: ${{ vars.GEELY_RELEASE_ENABLED }}
+        run: |
+          set -eu
+          test "$RELEASE_ENABLED" = 'true' || { echo 'Owner setup is required; see docs/RELEASE.md.'; exit 1; }
+          test "$IDENTITY_ACKNOWLEDGEMENT" = 'PUBLISH-EXTRACTABLE-IDENTITY'
+          test "$EXPECTED_SOURCE_SHA" = "$GITHUB_SHA"
+          [[ "$EXPECTED_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate source, version and new release intent
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE_SHA"
+          python3 scripts/check_public_tree.py
+          python3 scripts/geely_version.py --tag "$RELEASE_TAG" > "$RUNNER_TEMP/geely-version.json"
+          python3 - "$EXPECTED_SIGNER_SHA256" <<'PY'
+          import sys
+          sys.path.insert(0, 'scripts')
+          from validate_geely_apk import normalize_fingerprint
+          normalize_fingerprint(sys.argv[1])
+          PY
+          if git show-ref --verify --quiet "refs/tags/$RELEASE_TAG"; then
+            echo 'Tag already exists; do not overwrite or reuse a release tag.'; exit 1
+          fi
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/releases?per_page=100" > "$RUNNER_TEMP/geely-history.json"
+          python3 scripts/check_geely_release_history.py --version-metadata "$RUNNER_TEMP/geely-version.json" --history "$RUNNER_TEMP/geely-history.json" --previous-tag-output "$RUNNER_TEMP/geely-previous-tag"
+          previous_tag=$(cat "$RUNNER_TEMP/geely-previous-tag")
+          if [ -n "$previous_tag" ]; then
+            git show "$previous_tag:gradle/geely-version.properties" > "$RUNNER_TEMP/geely-previous.properties"
+            python3 scripts/geely_version.py --tag "$RELEASE_TAG" --previous "$RUNNER_TEMP/geely-previous.properties" > /dev/null
+            # Download only the PUBLIC JSON metadata, never an APK or credential.
+            gh release download "$previous_tag" --repo "$GITHUB_REPOSITORY" --pattern release-manifest.json --dir "$RUNNER_TEMP/geely-previous-release"
+            python3 - <<'PYVERIFY'
+          import json
+          import os
+          from pathlib import Path
+          import sys
+          sys.path.insert(0, 'scripts')
+          from check_geely_release_history import validate_previous_manifest
+          temp = Path(os.environ['RUNNER_TEMP'])
+          validate_previous_manifest(json.loads((temp / 'geely-version.json').read_text()), json.loads((temp / 'geely-previous-release/release-manifest.json').read_text()), os.environ['EXPECTED_SIGNER_SHA256'])
+          PYVERIFY
+          fi
+          python3 scripts/prepare_official_identity.py --check-metadata > "$RUNNER_TEMP/official-apk.json"
+          python3 scripts/test_official_identity.py
+          python3 scripts/test_geely_version.py
+          python3 scripts/test_geely_release_contract.py
+          python3 scripts/test_standalone_build_contract.py
+          python3 scripts/test_geely_vendor_boundary.py
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools platforms;android-37.0 build-tools;36.0.0 ndk;28.2.13676358
+      - name: Run identity-free source checks
+        run: ./gradlew -I scripts/source-only.init.gradle --no-daemon --no-configuration-cache --no-build-cache :shared:testDebugUnitTest :common:testDebugUnitTest :mobile:lintRelease :mobile:assembleDebug :mobile:writeGeelyVersionMetadata
+      - name: Compare Gradle and release version metadata
+        run: python3 scripts/geely_version.py --tag "$RELEASE_TAG" --gradle-metadata mobile/build/outputs/geely/version.json > /dev/null
+      - name: Provision pinned official identity, build with owner signing inputs and verify APK
+        env:
+          SIGNING_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          umask 077
+          private_dir=$(mktemp -d "$RUNNER_TEMP/geely-private.XXXXXXXX")
+          export DIPLAY_AUTH_ASSETS_DIR="$private_dir/auth"
+          export ANDROID_KEYSTORE_PATH="$private_dir/signing.jks"
+          trap 'rm -rf "$private_dir" "$GRADLE_USER_HOME" mobile/build common/build shared/build automotive/build .gradle .kotlin' EXIT
+          python3 - <<'PY'
+          import base64
+          import os
+          from pathlib import Path
+          import sys
+          try:
+              for name in ('ANDROID_KEYSTORE_PASSWORD', 'ANDROID_KEY_ALIAS', 'ANDROID_KEY_PASSWORD'):
+                  if not os.environ.get(name, '').strip():
+                      raise ValueError('missing input')
+              files = {
+                  'SIGNING_KEYSTORE_BASE64': Path(os.environ['ANDROID_KEYSTORE_PATH']),
+              }
+              for name, destination in files.items():
+                  data = base64.b64decode(os.environ.get(name, ''), validate=True)
+                  if not data:
+                      raise ValueError('empty input')
+                  destination.parent.mkdir(parents=True, exist_ok=True)
+                  destination.write_bytes(data)
+                  destination.chmod(0o600)
+          except Exception:
+              print('Existing release inputs are missing or invalid. Owner setup is required; no secrets were printed.', file=sys.stderr)
+              sys.exit(1)
+          PY
+          unset SIGNING_KEYSTORE_BASE64
+          # Public source metadata is pinned and must match the upstream version.
+          official_url=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["url"])' "$RUNNER_TEMP/official-apk.json")
+          curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --retry 2 --max-time 180 \
+            --output "$private_dir/official.apk" "$official_url"
+          python3 scripts/prepare_official_identity.py --apk "$private_dir/official.apk" \
+            --destination "$DIPLAY_AUTH_ASSETS_DIR" --owner-approved-provisioning
+          rm "$private_dir/official.apk"
+          if ! ./gradlew --no-daemon --no-configuration-cache --no-build-cache :mobile:assembleStandaloneRelease > "$private_dir/build.log" 2>&1; then
+            echo 'Standalone release build failed. Private build diagnostics were not uploaded; reproduce locally with the existing owner inputs.'; exit 1
+          fi
+          mkdir -p "$DIST"
+          cp mobile/build/outputs/apk/release/mobile-release.apk "$DIST/DiPlay-Geely-$RELEASE_TAG.apk"
+          python3 scripts/validate_geely_apk.py "$DIST/DiPlay-Geely-$RELEASE_TAG.apk" \
+            --version-metadata "$RUNNER_TEMP/geely-version.json" --signer-sha256 "$EXPECTED_SIGNER_SHA256" \
+            --source-sha "$EXPECTED_SOURCE_SHA" --aapt "$ANDROID_HOME/build-tools/36.0.0/aapt" \
+            --apksigner "$ANDROID_HOME/build-tools/36.0.0/apksigner" --output "$DIST/release-manifest.json"
+      - name: Prepare public source archive and release notes
+        run: |
+          set -euo pipefail
+          python3 scripts/check_public_tree.py
+          git archive --format=zip --prefix="DiPlay-Geely-$RELEASE_TAG/" "$EXPECTED_SOURCE_SHA" > "$DIST/DiPlay-Geely-$RELEASE_TAG-source.zip"
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          output = Path(os.environ['DIST'])
+          manifest = json.loads((output / 'release-manifest.json').read_text())
+          notes = f'''Normal Geely release {manifest['versionName']}
+
+          - Application ID: {manifest['applicationId']}
+          - Android version code: {manifest['versionCode']}
+          - Source commit: {manifest['sourceCommit']}
+          - Public signer SHA-256: {manifest['signerCertificateSha256']}
+          - Includes ARM64, ARMv7 and x86_64 native libraries and standalone runtime authentication assets
+          - This is a normal release package. Physical Xingyue L/head-unit compatibility and iPhone pairing have not been established by this build workflow
+          - This APK intentionally embeds a runtime accessory private key that anyone downloading it can extract. The Android signing keystore is not embedded
+          - The Geely package installs alongside upstream DiPlay. In-place updates require this same package ID, signing certificate and a higher version code; settings do not automatically migrate from upstream or debug packages
+          '''
+          (output / 'release-notes.md').write_text(notes)
+          PY
+          (cd "$DIST" && sha256sum ./*.apk ./*-source.zip ./release-manifest.json > SHA256SUMS)
+      - name: Create a new tag and complete normal public release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # POST creates a new ref atomically and fails if it already exists. Never PATCH/delete/force a tag.
+          gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" -f "ref=refs/tags/$RELEASE_TAG" -f "sha=$EXPECTED_SOURCE_SHA" > /dev/null
+          # Stage the assets in a draft before publication. Never clobber or reuse an existing release.
+          gh release create "$RELEASE_TAG" "$DIST/DiPlay-Geely-$RELEASE_TAG.apk" "$DIST/DiPlay-Geely-$RELEASE_TAG-source.zip" "$DIST/release-manifest.json" "$DIST/SHA256SUMS" \
+            --repo "$GITHUB_REPOSITORY" --verify-tag --draft --prerelease=false --title "DiPlay Geely $RELEASE_TAG" --notes-file "$DIST/release-notes.md"
+          for stage in draft published; do
+            if [ "$stage" = published ]; then
+              gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease=false --latest
+            fi
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" > "$RUNNER_TEMP/geely-published.json"
+          RELEASE_STAGE="$stage" python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          release = json.loads((Path(os.environ['RUNNER_TEMP']) / 'geely-published.json').read_text())
+          expected_draft = os.environ['RELEASE_STAGE'] == 'draft'
+          assert release['draft'] is expected_draft and release['prerelease'] is False
+          assert release['tag_name'] == os.environ['RELEASE_TAG']
+          output = Path(os.environ['DIST'])
+          expected = [output / f"DiPlay-Geely-{os.environ['RELEASE_TAG']}.apk", output / f"DiPlay-Geely-{os.environ['RELEASE_TAG']}-source.zip", output / 'release-manifest.json', output / 'SHA256SUMS']
+          assets = {asset['name']: asset for asset in release['assets']}
+          assert set(assets) == {path.name for path in expected}
+          for path in expected:
+              assert assets[path.name]['state'] == 'uploaded'
+              assert assets[path.name]['size'] == path.stat().st_size
+              with path.open('rb') as stream:
+                  digest = 'sha256:' + hashlib.file_digest(stream, 'sha256').hexdigest()
+              assert assets[path.name]['digest'] == digest
+          print('All four release asset sizes and SHA-256 digests match.')
+          if not expected_draft:
+              print('Published normal Geely release: ' + release['html_url'])
+          PY
+          done
+      - name: Remove private build intermediates and distribution copies
+        if: always()
+        run: rm -rf "$RUNNER_TEMP"/geely-private.* "$GRADLE_USER_HOME" "$DIST" mobile/build common/build shared/build automotive/build .gradle .kotlin

@@ -1,5 +1,7 @@
 package com.shilapi.xcertplay
 
+import com.shilapi.xcertplay.hud.GeelyVendorPolicy
+
 import android.Manifest
 import android.content.Context
 import android.content.Intent
@@ -692,6 +694,7 @@ class CarPlayHostActivity : ComponentActivity() {
     }
 
     private fun onClusterSurface(surface: Surface?) {
+        if (!GeelyVendorPolicy.bydCluster) return
         if (clusterSurface === surface) return
         // A direct handoff lets MediaCodec.setOutputSurface preserve its reference frames.
         // Clearing first would destroy the decoder and can leave stream 111 waiting for an IDR.

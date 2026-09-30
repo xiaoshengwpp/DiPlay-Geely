@@ -28,12 +28,13 @@ object AppLocale {
     private const val KEY_MIGRATED = "app_language_platform_migrated"
 
     fun preference(context: Context): String {
+        migrateToPlatform(context)
         if (Build.VERSION.SDK_INT >= 33) {
             val locales = context.getSystemService(LocaleManager::class.java).applicationLocales
             return if (locales.isEmpty) SYSTEM else locales[0].language
         }
         return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getString(KEY_LANGUAGE, SYSTEM)?.takeIf { it in ALL } ?: SYSTEM
+            .getString(KEY_LANGUAGE, SIMPLIFIED_CHINESE)?.takeIf { it in ALL } ?: SYSTEM
     }
 
     fun save(context: Context, language: String) {
@@ -51,25 +52,29 @@ object AppLocale {
 
     /** On Android 13+, the OS is the single source of truth for the app language. */
     fun wrap(context: Context): Context {
-        if (Build.VERSION.SDK_INT >= 33) {
-            val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            if (!prefs.getBoolean(KEY_MIGRATED, false)) {
-                val manager = context.getSystemService(LocaleManager::class.java)
-                val previous = locale(prefs.getString(KEY_LANGUAGE, SYSTEM) ?: SYSTEM)
-                // Never overwrite a language already chosen through Android Settings.
-                if (manager.applicationLocales.isEmpty && previous != null) {
-                    manager.applicationLocales = LocaleList(previous)
-                }
-                prefs.edit().putBoolean(KEY_MIGRATED, true).remove(KEY_LANGUAGE).apply()
-            }
-            return context
-        }
+        migrateToPlatform(context)
+        if (Build.VERSION.SDK_INT >= 33) return context
         val locale = locale(preference(context)) ?: return context
         val configuration = Configuration(context.resources.configuration).apply {
             setLocale(locale)
             setLayoutDirection(locale)
         }
         return context.createConfigurationContext(configuration)
+    }
+
+    private fun migrateToPlatform(context: Context) {
+        if (Build.VERSION.SDK_INT < 33) return
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        if (prefs.getBoolean(KEY_MIGRATED, false)) return
+        val manager = context.getSystemService(LocaleManager::class.java)
+        // Default to zh-CN only when no app preference exists. An explicit
+        // "system" choice, including an already migrated one, stays unchanged.
+        val previous = locale(prefs.getString(KEY_LANGUAGE, SIMPLIFIED_CHINESE) ?: SYSTEM)
+        // Never overwrite a language already chosen through Android Settings.
+        if (manager.applicationLocales.isEmpty && previous != null) {
+            manager.applicationLocales = LocaleList(previous)
+        }
+        prefs.edit().putBoolean(KEY_MIGRATED, true).remove(KEY_LANGUAGE).apply()
     }
 
     fun showPicker(activity: Activity) {

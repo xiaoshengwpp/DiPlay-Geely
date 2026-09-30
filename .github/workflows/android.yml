@@ -14,6 +14,17 @@ jobs:
       - uses: actions/checkout@v4
       - name: Reject credential files in public source
         run: python3 scripts/check_public_tree.py
+      - name: Validate GitHub Actions expression contexts
+        run: |
+          set -euo pipefail
+          tool_dir="$RUNNER_TEMP/actionlint-1.7.12"
+          mkdir -p "$tool_dir"
+          curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
+            https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz \
+            -o "$tool_dir/package.tar.gz"
+          printf '%s  %s\n' 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8 "$tool_dir/package.tar.gz" | sha256sum -c -
+          tar -xzf "$tool_dir/package.tar.gz" -C "$tool_dir" actionlint
+          "$tool_dir/actionlint" -shellcheck= -pyflakes= .github/workflows/android.yml .github/workflows/release-geely.yml
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -22,8 +33,16 @@ jobs:
         with:
           packages: platform-tools platforms;android-37.0 build-tools;36.0.0 ndk;28.2.13676358
       - uses: gradle/actions/setup-gradle@v4
-      - name: Unit tests, lint and source-only debug build
-        run: ./gradlew :shared:testDebugUnitTest :common:testDebugUnitTest :mobile:lintDebug :mobile:assembleDebug --stacktrace
+      - name: Verify build contract
+        run: |
+          python3 scripts/test_standalone_build_contract.py
+          python3 scripts/test_geely_version.py
+          python3 scripts/prepare_official_identity.py --check-metadata
+          python3 scripts/test_official_identity.py
+          python3 scripts/test_geely_release_contract.py
+          python3 scripts/test_geely_vendor_boundary.py
+      - name: Unit tests, lint and unsigned source-only debug build
+        run: ./gradlew -I scripts/source-only.init.gradle :shared:testDebugUnitTest :common:testDebugUnitTest :mobile:lintDebug :mobile:assembleDebug --stacktrace
       - name: Test reports
         if: always()
         uses: actions/upload-artifact@v4
