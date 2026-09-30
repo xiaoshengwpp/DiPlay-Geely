@@ -1,6 +1,6 @@
-name: 吉利故障反馈
-description: 报告连接、声音、显示或其他可复现问题
-title: '[故障] 车型 / 固件 - 简述问题'
+name: 吉利兼容性记录
+description: 逐项记录特定车型、固件和应用版本的成功、失败与未测
+title: '[兼容性] 车型 / 年款 / 配置 - 固件版本'
 body:
 - type: markdown
   attributes:
@@ -60,23 +60,40 @@ body:
   validations:
     required: false
 - type: textarea
-  id: reproduce
+  id: results
   attributes:
-    label: 复现步骤、频率与近期变化
-    description: 按顺序列步骤，写出现次数 / 测试次数、此前是否正常、最近升级或设置变化
+    label: 逐项测试结果（通过 / 失败 / 未测）
+    description: 只代表本次版本组合，未测不是支持。仪表 / HUD 等厂商功能需分别验证。
+    value: '- 首次连接：未测
+
+      - 断线重连：未测
+
+      - 休眠唤醒：未测
+
+      - 媒体声音：未测
+
+      - 导航播报：未测
+
+      - Siri：未测
+
+      - 通话：未测
+
+      - 音频切换与恢复：未测
+
+      - 显示 / 分辨率：未测
+
+      - 触控：未测
+
+      - 方向盘按键：未测
+
+      - 仪表 / HUD：未测'
   validations:
     required: true
 - type: textarea
-  id: expected
+  id: procedure
   attributes:
-    label: 预期结果
-  validations:
-    required: true
-- type: textarea
-  id: actual
-  attributes:
-    label: 实际结果：连接与音频分开写
-    description: 连接：能否进入 CarPlay、黑屏 / 断线 / 重连情况；音频：媒体、导航、Siri、通话逐项写正常 / 异常 / 未测，输出位置及切换恢复情况
+    label: 测试步骤、预期 / 实际结果及持续时间
+    description: 补充各项测试次数、稳定性与限制；声音问题注明输出位置和连接状态。已有故障议题请贴链接
   validations:
     required: true
 - type: textarea
