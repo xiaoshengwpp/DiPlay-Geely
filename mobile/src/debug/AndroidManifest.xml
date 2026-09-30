@@ -1,6 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
     <!-- BYD diagnostics are intentionally unavailable in this Geely-targeted build. -->
-    <application android:label="DiPlay HUD Test" tools:replace="android:label">
+    <application android:label="DiPlay Geely Dev" tools:replace="android:label">
     <receiver android:name="com.shilapi.xcertplay.hud.StarterBridgeReceiver" android:enabled="false" android:exported="false" android:permission="android.permission.DUMP" />
     <activity android:name="com.shilapi.xcertplay.hud.StandaloneHudDemoActivity" android:enabled="false" android:exported="false" android:permission="android.permission.DUMP" />
     </application></manifest>
