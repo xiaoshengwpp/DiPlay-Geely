@@ -5,10 +5,10 @@ Requirements: JDK 25, Android SDK 37, NDK 28.2.13676358 and the included Gradle 
 ## Source and CI builds
 
 ```sh
-./gradlew :shared:testDebugUnitTest :common:testDebugUnitTest :mobile:lintDebug :mobile:assembleDebug
+./gradlew -I scripts/source-only.init.gradle :shared:testDebugUnitTest :common:testDebugUnitTest :mobile:lintDebug :mobile:assembleDebug
 ```
 
-The resulting source-only APK contains no accessory identity. Standalone CarPlay requires runtime authentication provisioning. Tests generate synthetic identities at runtime; no test private-key files are tracked.
+The opt-in init script requires all authentication/signing environment inputs to be unset and disables debug signing for every application module. It neither uses nor generates a debug keystore. The resulting source-only APK is unsigned, contains no accessory identity and is not an installable standalone CarPlay deliverable. Tests generate disposable synthetic identities at runtime; no test private-key files are tracked. Developer builds without this init script retain Android's normal debug-signing behavior.
 
 ## Local release packaging
 
@@ -36,4 +36,28 @@ This task refuses missing or empty runtime inputs. `assembleDebug` remains an id
 source/CI build when the explicit asset input is absent; do not install that output as a
 standalone car-test package. Before delivery, verify both `assets/offline-mfi/identity.pk8`
 and `assets/offline-mfi/certificate.p7b` in the APK against the selected local inputs.
-Update the existing test app without uninstalling it to preserve its settings.
+Back up any reports/settings the app supports exporting first. Update an existing test app without uninstalling it only after confirming the package ID and signing certificate match and the version code is compatible; otherwise Android may reject the update. Uninstalling can erase app data.
+
+The debug task uses Android's ordinary debug signing unless explicitly overridden. A fresh build machine can generate a different debug key, so do not use that task for a stable distribution or assume it can update a previous APK.
+
+## Stable standalone release (external inputs required)
+
+Prepare the following inputs yourself in the chosen private build environment, outside this source tree:
+
+- `DIPLAY_AUTH_ASSETS_DIR`: an existing directory containing the authorized `offline-mfi/identity.pk8` and `offline-mfi/certificate.p7b` runtime files
+- `ANDROID_KEYSTORE_PATH`: an existing, backed-up Android signing keystore
+- `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and `ANDROID_KEY_PASSWORD`: values for that same existing signing identity
+
+Keep these values out of chat, Git, build logs and public CI. The standalone release path does not download or extract identities from another APK, generate a signing key, save secrets to a service, or publish a release. Supplying existing environment inputs is a separate owner-controlled step; the checks below only validate presence and file metadata, not authorization or cryptographic validity.
+
+After those inputs have been securely provided, the owner-controlled packaging command is:
+
+```sh
+./gradlew --no-configuration-cache --no-build-cache :mobile:assembleStandaloneRelease
+```
+
+This dedicated task rejects missing, empty or in-tree inputs before release signing/packaging. It does not change ordinary `assembleRelease` behavior. Avoid shared caches for this command. The output remains `mobile/build/outputs/apk/release/mobile-release.apk`.
+
+Before distribution, verify the APK's package ID, version code and public signing-certificate fingerprint against the intended installation. Release currently uses `com.shihab.diplay`; debug uses `com.shihab.diplay.hudtest`. A new key cannot update an upstream-signed installation with the same package ID. Keep the same signing identity for future Geely releases; switching from debug to release also changes package ID. Do not claim an update path until those facts are checked.
+
+The standalone APK embeds its runtime accessory private key, which recipients can extract; the Android signing keystore is not embedded. Keep package transfer/distribution owner-controlled, with that exposure understood. Passing source tests or building this APK does not establish successful iPhone pairing or Xingyue L head-unit compatibility; those need authorized physical testing.
