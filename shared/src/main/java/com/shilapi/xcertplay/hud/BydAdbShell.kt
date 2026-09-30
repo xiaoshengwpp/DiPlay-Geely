@@ -17,6 +17,7 @@ internal class BydAdbShell(private val tag: String) {
 
     @Synchronized
     fun run(context: Context, command: String): String? {
+        if (!GeelyVendorPolicy.bydAdb) return null
         val now = SystemClock.elapsedRealtime()
         if (now < retryAtMillis) return null
         val client = adb ?: LocalAdb(AdbKeys.load(context)).also { adb = it }

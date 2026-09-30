@@ -39,6 +39,7 @@ internal object BydClusterMapPause {
 
     /** Never waits for the ticker: an adb read in flight does not hold up opening or reconnecting. */
     fun initialize(appContext: Context) {
+        if (!GeelyVendorPolicy.bydCluster) return
         context = appContext.applicationContext
         if (tickerStarted.compareAndSet(false, true)) {
             Executors.newSingleThreadScheduledExecutor { runnable ->
