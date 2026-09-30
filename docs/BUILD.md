@@ -1,63 +1,77 @@
-# Building DiPlay
+# Building DiPlay Geely
 
 Requirements: JDK 25, Android SDK 37, NDK 28.2.13676358 and the included Gradle wrapper.
 
 ## Source and CI builds
 
 ```sh
+python3 scripts/check_public_tree.py
+python3 scripts/test_geely_version.py
+python3 scripts/test_geely_release_contract.py
+python3 scripts/test_standalone_build_contract.py
+python3 scripts/test_geely_vendor_boundary.py
 ./gradlew -I scripts/source-only.init.gradle :shared:testDebugUnitTest :common:testDebugUnitTest :mobile:lintDebug :mobile:assembleDebug
 ```
 
 The opt-in init script requires all authentication/signing environment inputs to be unset and disables debug signing for every application module. It neither uses nor generates a debug keystore. The resulting source-only APK is unsigned, contains no accessory identity and is not an installable standalone CarPlay deliverable. Tests generate disposable synthetic identities at runtime; no test private-key files are tracked. Developer builds without this init script retain Android's normal debug-signing behavior.
 
-## Local release packaging
+The normal Geely release uses `io.github.xiaoshengwpp.diplay.geely`. The debug variant uses `io.github.xiaoshengwpp.diplay.geely.hudtest`. Neither is an in-place replacement for upstream `com.shihab.diplay`. Namespace/class names retain their upstream names and do not define the installed application's identity.
 
-Provide an external asset directory using `DIPLAY_AUTH_ASSETS_DIR`. The directory must contain exactly the intended runtime files under `offline-mfi/identity.pk8` and `offline-mfi/certificate.p7b`. Neither file belongs in Git. The build permits those two files only when this explicit input is set and rejects unexpected credential containers elsewhere in APK assets.
+## Version metadata
 
-Set `ANDROID_KEYSTORE_PATH`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and `ANDROID_KEY_PASSWORD` locally for your Android signing key. Never commit these values or the keystore. Different signing keys cannot update an existing project-signed installation.
+`gradle/geely-version.properties` carries the upstream version name/code and the Geely revision. The initial normal version is `0.2.7-geely.1`, code `26001`, tag `v0.2.7-geely.1`. The display version keeps upstream's `0.2.7` intact and adds `.1` as the Geely revision. See [RELEASE.md](RELEASE.md) for the increment policy.
+
+These commands inspect public metadata only:
 
 ```sh
-./gradlew :shared:testDebugUnitTest :common:testDebugUnitTest :mobile:lintRelease :mobile:assembleRelease
+python3 scripts/geely_version.py --tag v0.2.7-geely.1
+./gradlew --no-configuration-cache :mobile:writeGeelyVersionMetadata
+python3 scripts/geely_version.py --gradle-metadata mobile/build/outputs/geely/version.json
 ```
 
-Output: `mobile/build/outputs/apk/release/mobile-release.apk`. The release APK deliberately contains the experimental identity described in the notices; it is extractable by recipients. The separate Android signing key is not included. The retired build-beta.py helper is not used; this Gradle workflow uses explicit environment inputs.
+## Normal standalone release
 
-The public release source archive corresponds to the tagged source and excludes runtime identities, signing keys, local configuration and build output.
+The owner-dispatched GitHub workflow builds and publishes a normal, signed APK to public Releases using existing owner-provisioned inputs. It is documented in [RELEASE.md](RELEASE.md). Ordinary pushes remain source-only checks. No package is published merely by committing the workflow.
 
-## Standalone car-test APK
+The same normal release can be built locally after the owner securely supplies these existing inputs outside the source tree:
 
-Use `:mobile:assembleStandaloneDebug` for a test APK that must connect to an iPhone:
+- `DIPLAY_AUTH_ASSETS_DIR`: a directory containing the authorized `offline-mfi/identity.pk8` and `offline-mfi/certificate.p7b` runtime files
+- `ANDROID_KEYSTORE_PATH`: an existing, backed-up Android signing keystore
+- `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`: the values for that same existing signing identity
+
+Never commit these values/files or send them in chat. Secure provisioning is separate from source review. The build does not download or extract identities from another APK, generate a signing key, save secrets to a service, or publish a release.
+
+```sh
+./gradlew --no-daemon --no-configuration-cache --no-build-cache :mobile:assembleStandaloneRelease
+```
+
+This dedicated task rejects missing, empty or in-tree inputs before release signing/packaging. It does not change ordinary `assembleRelease` behavior. Avoid shared caches. Output: `mobile/build/outputs/apk/release/mobile-release.apk`.
+
+Before distribution, run the public-metadata/signature validator with the actual source SHA and expected public signing fingerprint, substituting those two public values below:
+
+```sh
+python3 scripts/geely_version.py > /tmp/geely-version.json
+python3 scripts/validate_geely_apk.py mobile/build/outputs/apk/release/mobile-release.apk \
+  --version-metadata /tmp/geely-version.json \
+  --signer-sha256 EXPECTED_PUBLIC_CERTIFICATE_SHA256 \
+  --source-sha FULL_SOURCE_COMMIT_SHA \
+  --aapt "$ANDROID_HOME/build-tools/36.0.0/aapt" \
+  --apksigner "$ANDROID_HOME/build-tools/36.0.0/apksigner" \
+  --output /tmp/geely-release-manifest.json
+```
+
+The validator checks release package/version, public certificate/signature, all configured native architectures and nonempty authentication entries without extracting or printing identity contents. These metadata checks do not establish pairing/authentication validity or physical Xingyue L compatibility. Those require authorized real-device testing.
+
+The APK deliberately embeds its runtime accessory private key, which recipients can extract; the Android signing keystore is not embedded. Public package distribution is an owner-controlled action with that exposure understood. The public source archive contains only the tagged source, excluding runtime identities, signing keys, local configuration and build output.
+
+Keep the same Android signing identity for future Geely releases. In-place updates require this same package ID, signing certificate and a higher version code. Upstream/debug installations can remain alongside it; settings do not migrate automatically. Back up supported reports/settings before changing installations, and remember that uninstalling can erase app data.
+
+## Development-only standalone debug build
+
+`:mobile:assembleStandaloneDebug` remains available for deliberate local development with existing runtime inputs:
 
 ```sh
 DIPLAY_AUTH_ASSETS_DIR=/absolute/path/to/runtime-assets ./gradlew :mobile:assembleStandaloneDebug
 ```
 
-This task refuses missing or empty runtime inputs. `assembleDebug` remains an identity-free
-source/CI build when the explicit asset input is absent; do not install that output as a
-standalone car-test package. Before delivery, verify both `assets/offline-mfi/identity.pk8`
-and `assets/offline-mfi/certificate.p7b` in the APK against the selected local inputs.
-Back up any reports/settings the app supports exporting first. Update an existing test app without uninstalling it only after confirming the package ID and signing certificate match and the version code is compatible; otherwise Android may reject the update. Uninstalling can erase app data.
-
-The debug task uses Android's ordinary debug signing unless explicitly overridden. A fresh build machine can generate a different debug key, so do not use that task for a stable distribution or assume it can update a previous APK.
-
-## Stable standalone release (external inputs required)
-
-Prepare the following inputs yourself in the chosen private build environment, outside this source tree:
-
-- `DIPLAY_AUTH_ASSETS_DIR`: an existing directory containing the authorized `offline-mfi/identity.pk8` and `offline-mfi/certificate.p7b` runtime files
-- `ANDROID_KEYSTORE_PATH`: an existing, backed-up Android signing keystore
-- `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and `ANDROID_KEY_PASSWORD`: values for that same existing signing identity
-
-Keep these values out of chat, Git, build logs and public CI. The standalone release path does not download or extract identities from another APK, generate a signing key, save secrets to a service, or publish a release. Supplying existing environment inputs is a separate owner-controlled step; the checks below only validate presence and file metadata, not authorization or cryptographic validity.
-
-After those inputs have been securely provided, the owner-controlled packaging command is:
-
-```sh
-./gradlew --no-configuration-cache --no-build-cache :mobile:assembleStandaloneRelease
-```
-
-This dedicated task rejects missing, empty or in-tree inputs before release signing/packaging. It does not change ordinary `assembleRelease` behavior. Avoid shared caches for this command. The output remains `mobile/build/outputs/apk/release/mobile-release.apk`.
-
-Before distribution, verify the APK's package ID, version code and public signing-certificate fingerprint against the intended installation. Release currently uses `com.shihab.diplay`; debug uses `com.shihab.diplay.hudtest`. A new key cannot update an upstream-signed installation with the same package ID. Keep the same signing identity for future Geely releases; switching from debug to release also changes package ID. Do not claim an update path until those facts are checked.
-
-The standalone APK embeds its runtime accessory private key, which recipients can extract; the Android signing keystore is not embedded. Keep package transfer/distribution owner-controlled, with that exposure understood. Passing source tests or building this APK does not establish successful iPhone pairing or Xingyue L head-unit compatibility; those need authorized physical testing.
+It refuses missing or empty authentication files. It uses Android's ordinary debug signing unless explicitly overridden; a fresh machine may generate a different debug key. This `.hudtest` package is separate from the normal Geely release and is unsuitable for a stable distribution/update identity. Use the normal release path above for public APKs.
