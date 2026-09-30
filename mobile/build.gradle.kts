@@ -118,3 +118,55 @@ tasks.register("assembleStandaloneDebug") {
     description = "Build a standalone car-test APK with explicitly provisioned authentication."
     dependsOn(verifyStandaloneAuthentication, "assembleDebug")
 }
+
+// Validate only caller-provided paths/presence here. Never create a keystore or
+// import runtime authentication material as part of a build.
+val releaseSigningInputNames = listOf(
+    "ANDROID_KEYSTORE_PATH", "ANDROID_KEYSTORE_PASSWORD", "ANDROID_KEY_ALIAS", "ANDROID_KEY_PASSWORD",
+)
+val releaseSigningInputsPresent = releaseSigningInputNames.map { name ->
+    providers.environmentVariable(name).map { it.isNotBlank() }.getOrElse(false)
+}
+val existingReleaseKeystore = providers.environmentVariable("ANDROID_KEYSTORE_PATH")
+    .orNull?.takeIf { it.isNotBlank() }?.let { file(it).canonicalFile }
+val sourceDirectory = rootProject.projectDir.canonicalFile.toPath()
+val verifyExistingReleaseSigningInputs by tasks.registering {
+    group = "verification"
+    description = "Require an existing external signing keystore without creating or importing credentials."
+    val present = releaseSigningInputsPresent
+    val keystore = existingReleaseKeystore
+    val source = sourceDirectory
+    doLast {
+        check(present.all { it }) { "Standalone release requires all four ANDROID_KEYSTORE/KEY signing inputs" }
+        check(keystore != null && keystore.isFile && keystore.length() > 0) {
+            "Standalone release requires an existing nonempty signing keystore"
+        }
+        check(!keystore.toPath().startsWith(source)) { "Keep the signing keystore outside the source tree" }
+    }
+}
+val verifyStandaloneReleaseInputs by tasks.registering {
+    group = "verification"
+    description = "Check external authentication and stable signing inputs before standalone release packaging."
+    dependsOn(verifyStandaloneAuthentication, verifyExistingReleaseSigningInputs)
+    // Do not retain configuration containing the caller's release signing inputs.
+    notCompatibleWithConfigurationCache("Standalone release uses private caller-supplied inputs")
+    val directory = localAuthenticationAssets
+    val source = sourceDirectory
+    doLast {
+        check(directory != null && !directory.toPath().startsWith(source)) {
+            "Keep standalone authentication assets outside the source tree"
+        }
+        check(listOf("identity.pk8", "certificate.p7b").all {
+            !directory.resolve("offline-mfi/$it").canonicalFile.toPath().startsWith(source)
+        }) { "Standalone authentication files must not link into the source tree" }
+    }
+}
+// Ordering applies only when the standalone verifier is in the task graph.
+// Ordinary source/release task behavior stays unchanged.
+tasks.matching { it.name in setOf("preReleaseBuild", "validateSigningRelease", "packageRelease") }
+    .configureEach { mustRunAfter(verifyStandaloneReleaseInputs) }
+tasks.register("assembleStandaloneRelease") {
+    group = "build"
+    description = "Build a standalone APK using only existing external authentication and signing inputs."
+    dependsOn(verifyStandaloneReleaseInputs, "assembleRelease")
+}
