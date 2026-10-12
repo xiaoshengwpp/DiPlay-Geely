@@ -1,0 +1,103 @@
+# INACTIVE TEMPLATE. Review before copying to .github/workflows/owner-release.yml.
+# Only the repository owner may manually run it. No push/tag/PR build or publication.
+name: Owner experimental release build
+on:
+  workflow_dispatch:
+    inputs:
+      acknowledge_identity:
+        description: 'I choose to process the official experimental identity and embed it in my APK'
+        required: true
+        type: boolean
+        default: false
+      acknowledge_github_artifact:
+        description: 'I choose to upload that identity-containing APK to this GitHub repository artifact storage'
+        required: true
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: owner-experimental-release
+  cancel-in-progress: false
+jobs:
+  owner-build:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      github.repository == 'xiaoshengwpp/DiPlay-Geely' && github.ref == 'refs/heads/main' &&
+      github.actor == 'xiaoshengwpp' && github.triggering_actor == 'xiaoshengwpp' &&
+      inputs.acknowledge_identity && inputs.acknowledge_github_artifact
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: release-control
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: dca9e36b555cf6ebba041f8abbe72aaed0aab227
+          path: build-source
+          persist-credentials: false
+      - name: Verify locked source before sensitive steps
+        run: python3 release-control/scripts/owner_release.py check-source --source build-source
+      - name: Test only inert packaging fixtures
+        working-directory: release-control
+        run: python3 -m unittest discover -s scripts -p test_owner_release.py -v
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '25'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools platforms;android-37.0 build-tools;36.0.0 ndk;28.2.13676358
+      # No Gradle cache action: never cache runtime assets, signing inputs or build outputs.
+      - name: Owner-selected identity import and signed build
+        shell: bash
+        env:
+          KEYSTORE_BASE64: ${{ secrets.OWNER_ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          umask 077
+          PRIVATE="$RUNNER_TEMP/diplay-owner-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          mkdir "$PRIVATE"
+          trap 'rm -rf -- "$PRIVATE" "$GITHUB_WORKSPACE/build-source"' EXIT
+          export GRADLE_USER_HOME="$PRIVATE/gradle"
+          export DIPLAY_AUTH_ASSETS_DIR="$PRIVATE/auth"
+          export ANDROID_KEYSTORE_PATH="$PRIVATE/owner-signing.jks"
+          test -n "$KEYSTORE_BASE64" && test -n "$ANDROID_KEYSTORE_PASSWORD"
+          test -n "$ANDROID_KEY_ALIAS" && test -n "$ANDROID_KEY_PASSWORD"
+          printf '%s' "$KEYSTORE_BASE64" | base64 --decode > "$ANDROID_KEYSTORE_PATH"
+          unset KEYSTORE_BASE64
+          test -s "$ANDROID_KEYSTORE_PATH"
+          curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' \
+            --max-time 180 --max-filesize 18170831 --output "$PRIVATE/official.apk" \
+            'https://github.com/shihabal3amri/DiPlay/releases/download/v0.2.18/DiPlay-0.2.18.apk'
+          python3 release-control/scripts/owner_release.py extract \
+            --apk "$PRIVATE/official.apk" --destination "$DIPLAY_AUTH_ASSETS_DIR" --source "$GITHUB_WORKSPACE/build-source"
+          cd build-source
+          # Never use --debug, --info, --scan, an environment dump or a build-log artifact.
+          ./gradlew :mobile:assembleRelease --no-daemon --no-build-cache --no-configuration-cache --console=plain
+          cd ..
+          python3 release-control/scripts/owner_release.py verify \
+            --apk build-source/mobile/build/outputs/apk/release/mobile-release.apk \
+            --source build-source --runtime-dir "$DIPLAY_AUTH_ASSETS_DIR" --aapt "$ANDROID_HOME/build-tools/36.0.0/aapt" \
+            --apksigner "$ANDROID_HOME/build-tools/36.0.0/apksigner" --output "$RUNNER_TEMP/owner-delivery"
+      - name: Store APK at owner's explicit choice (identity is extractable)
+        uses: actions/upload-artifact@v4
+        with:
+          name: owner-DiPlay-0.2.18-geely.1
+          retention-days: 1
+          if-no-files-found: error
+          path: |
+            ${{ runner.temp }}/owner-delivery/DiPlay-0.2.18-geely.1.apk
+            ${{ runner.temp }}/owner-delivery/SHA256SUMS.txt
+            ${{ runner.temp }}/owner-delivery/build-manifest.json
+      - name: Remove transient outputs
+        if: always()
+        shell: bash
+        run: |
+          rm -rf -- "$RUNNER_TEMP/diplay-owner-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" "$RUNNER_TEMP/owner-delivery" \
+            "$GITHUB_WORKSPACE/build-source"
