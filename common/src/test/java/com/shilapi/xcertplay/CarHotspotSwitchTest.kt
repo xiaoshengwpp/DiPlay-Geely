@@ -38,7 +38,7 @@ import org.robolectric.shadows.ShadowToast
 class CarHotspotSwitchTest {
     private lateinit var activity: DiPlayActivity
     private lateinit var controls: LinearLayout
-    private var hotspotBeforeResume: Map<String, *> = emptyMap()
+    private var hotspotBeforeResume: Map<String, *> = emptyMap<String, Any?>()
 
     @Before fun setUp() {
         val app = RuntimeEnvironment.getApplication()
