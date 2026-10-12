@@ -5,6 +5,13 @@ import org.junit.Test
 import java.nio.file.Files
 
 class DiagnosticRedactorTest {
+    @Test fun callPlaybackDiagnosticsSurviveButPhoneLogsStillDoNot() {
+        val call = "audio stats audioType=telephony channel=CALL routeType=2 codec=OPUS sampleRate=48000"
+        assertEquals(call, DiagnosticRedactor.redact(call))
+        assertNull(DiagnosticRedactor.redact(call.replace("channel=CALL", "channel=PHONE")))
+        assertNull(DiagnosticRedactor.redact("PHONE private iPhone log"))
+    }
+
     @Test fun additionalTroubleshootingMetadataSurvivesSavedReportWithoutPayloads() {
         val lines = listOf(
             "wireless startup elapsedMs=10000 authenticated=true wifiConfigs=2 startRequests=1 tcpAccepted=0 sessionActive=false waitingFor=WiFi_discovery_or_AirPlay_TCP startRequestAgeMs=9000 firstTcpAfterStartMs=none",
