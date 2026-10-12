@@ -133,6 +133,22 @@ class OwnerReleaseTests(unittest.TestCase):
     def test_verification_rejects_loose_signing_container(self):
         with self.assertRaises(ValueError): self.verify_fixture(extra=[("assets/inert.jks", "INERT NOT A KEYSTORE")])
 
+    def test_enabled_workflow_matches_reviewed_template(self):
+        root = Path(__file__).resolve().parents[1]
+        template = (root / "docs/templates/owner-release.yml.example").read_text()
+        enabled = (root / ".github/workflows/owner-release.yml").read_text()
+        self.assertEqual(template.splitlines()[1:], enabled.splitlines()[1:])
+        self.assertEqual(enabled.count("workflow_dispatch:"), 1)
+        self.assertIn("on:\n  workflow_dispatch:\n", enabled)
+        self.assertEqual(enabled.count("default: false"), 2)
+        self.assertIn("github.actor == 'xiaoshengwpp'", enabled)
+        self.assertIn("github.ref == 'refs/heads/main'", enabled)
+        self.assertIn("github.triggering_actor == 'xiaoshengwpp'", enabled)
+        self.assertIn(r.LOCK["source_commit"], enabled)
+        self.assertIn(r.LOCK["official_apk_url"], enabled)
+        for automatic_event in ("push:", "pull_request:", "pull_request_target:", "schedule:", "workflow_run:", "repository_dispatch:"):
+            self.assertNotIn(automatic_event, enabled)
+
     def test_template_is_inactive_and_manual_only(self):
         text = (Path(__file__).resolve().parents[1] / "docs/templates/owner-release.yml.example").read_text()
         self.assertIn("workflow_dispatch:", text)

@@ -2,7 +2,7 @@
 
 ## 当前交付状态
 
-这是待审查的构建准备方案，不是已经生成的 APK。`docs/templates/owner-release.yml.example` 是不活跃模板，GitHub 不会把它识别为 Actions workflow。本 PR 不下载官方 APK、不提取真实身份、不生成或导入真实签名密钥、不配置 Secrets、不触发签名构建、不创建 Release。
+这是待审查的构建准备方案，不是已经生成的 APK。`.github/workflows/owner-release.yml` 是仅 owner 手动启动的入口；合并到默认分支后 GitHub 才会注册它。`docs/templates/owner-release.yml.example` 保留为内容一致的审查模板。本 PR 和合并动作不会下载官方 APK、提取真实身份、生成或导入真实签名密钥、配置 Secrets、触发签名构建或创建 Release。
 
 源码基线固定为 [`dca9e36b555cf6ebba041f8abbe72aaed0aab227`](https://github.com/xiaoshengwpp/DiPlay-Geely/commit/dca9e36b555cf6ebba041f8abbe72aaed0aab227)。它集成官方 0.2.18，仍需本方案代码审查、owner 的签名输入和亲自运行才能产生候选完整 APK。普通 Android checks 只证明源码测试、lint 和无身份 debug 构建，不能证明完整 CarPlay 认证或实车可用。
 
@@ -30,9 +30,9 @@
 
 ## 我们准备和审查的部分
 
-1. 本 PR 提供脚本、惰性 fixture 测试和不活跃 workflow 模板。测试材料是明显的普通文本，不是生成的私钥或证书。
-2. 审查通过后另一步启用：将模板复制为 `.github/workflows/owner-release.yml` 并合并到默认分支；不需要 owner 手工设计流水线。仅合并本 PR 不会启用它。
-3. 启用后的流水线只允许仓库 `xiaoshengwpp/DiPlay-Geely` 的 owner `xiaoshengwpp` 亲自 workflow_dispatch；重跑者也必须是该 owner。没有 push、tag 或 PR 敏感构建触发器。
+1. 本 PR 提供脚本、惰性 fixture 测试、仅手动 workflow 及一致的模板。测试材料是明显的普通文本，不是生成的私钥或证书。
+2. 审查和源码 CI 通过后，由维护者合并到默认分支并核对 GitHub 已注册入口；不需要 owner 手工设计流水线。合并只注册入口，不启动这个 workflow。
+3. 启用后的流水线只允许仓库 `xiaoshengwpp/DiPlay-Geely` 的 owner `xiaoshengwpp` 在 `main` 分支亲自 workflow_dispatch；重跑者也必须是该 owner。没有 push、tag 或 PR 敏感构建触发器。
 4. 默认 token 只有 `contents: read`，不创建 Release。构建源码 checkout 固定提交，与 workflow 工具 checkout 分开；不接受任意源码、任意下载地址或任意文件路径输入。
 
 ## Owner 必须亲自完成的最少步骤
@@ -56,12 +56,16 @@
 
 你需要一个由你自己控制、已安装 JDK 的可信终端；已有的私有云终端也可以，不需要助手访问你的 Mac。这里没有替你开通任何云服务，也不假定你已有可用环境。若没有这样的终端，请先确定一个你愿意使用的环境；不要为赶进度把密钥交给公共在线生成器或随意新开付费环境。
 
-仅首次、由你本人在该可信终端运行（示例使用 Linux shell）：
+如果没有现成云终端，可由你本人选择 GitHub Codespaces 的浏览器终端：先查看自己账号的免费额度和计费提示，再在仓库 **Code → Codespaces → Create codespace** 中创建。若页面要求开通付费、额度用尽或你不愿让 GitHub 托管签名，停在这里，不自动开通。创建后打开 Terminal，先运行 `keytool -help` 确认 JDK 可用；若不存在，先补充可信 JDK 环境再生成。不要只按 `.` 打开 github.dev，那不是可执行命令的云终端。此步骤和密钥输入均由你本人完成。
+
+参考 GitHub 的[创建 Codespace 指南](https://docs.github.com/en/codespaces/developing-in-a-codespace/creating-a-codespace-for-a-repository?tool=webui)与[计费说明](https://docs.github.com/en/billing/concepts/product-billing/github-codespaces)。本方案未核查你的剩余额度，也未创建任何 Codespace。
+
+仅首次、由你本人在该可信终端运行（示例使用 Linux shell，材料放在 HOME 私有目录，源码外）：
 
 ```sh
 umask 077
-mkdir -m 700 diplay-signing-private
-cd diplay-signing-private
+mkdir -m 700 "$HOME/diplay-signing-private"
+cd "$HOME/diplay-signing-private"
 keytool -genkeypair -keystore diplay-geely-release.p12 -storetype PKCS12 \
   -alias diplay-geely-release -keyalg RSA -keysize 3072 -validity 10000
 ```
@@ -81,14 +85,14 @@ keytool -list -v -keystore diplay-geely-release.p12 -alias diplay-geely-release
 
 ### 2. 启用并审查后，你本人点击 Run workflow
 
-本模板目前没有可用的专属 Run workflow 入口。只有上面的启用 PR 已合并、GitHub 确认注册 workflow 后，才可在[本仓库 Actions](https://github.com/xiaoshengwpp/DiPlay-Geely/actions) 选择 `Owner experimental release build`。
+本 PR 尚未合并时没有已确认可用的专属 Run workflow 入口。只有本 PR 已合并、GitHub 确认注册 workflow 后，才可在[本仓库 Actions](https://github.com/xiaoshengwpp/DiPlay-Geely/actions) 选择 `Owner experimental release build`。
 
 亲自勾选两项确认：
 
 - 你选择处理官方实验性身份，并将它打包到自己的 APK。
 - 你选择将这个含身份的 APK 上传到本仓库的 GitHub Actions artifact 存储。
 
-然后由你本人点击 Run workflow。助手不代点，不代填 Secrets。GitHub runner 会实际处理原始身份和 Android 签名库；含身份 APK 中的身份仍可提取。Artifact 存储不是“密钥仍保密”的保证，它不是私人保险箱；公开仓库中有 artifact 下载权限的其他用户可能取得此身份 APK。保留期设为 1 天，请及时取回。
+分支选择 `main`，然后由你本人点击 Run workflow。助手不代点，不代填 Secrets。GitHub runner 会实际处理原始身份和 Android 签名库；含身份 APK 中的身份仍可提取。Artifact 存储不是“密钥仍保密”的保证，它不是私人保险箱；公开仓库中有 artifact 下载权限的其他用户可能取得此身份 APK。保留期设为 1 天，请及时取回。
 
 ### 3. 下载并核对结果，再决定后续发布
 

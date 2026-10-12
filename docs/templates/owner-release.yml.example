@@ -23,7 +23,7 @@ jobs:
   owner-build:
     if: >-
       github.event_name == 'workflow_dispatch' &&
-      github.repository == 'xiaoshengwpp/DiPlay-Geely' &&
+      github.repository == 'xiaoshengwpp/DiPlay-Geely' && github.ref == 'refs/heads/main' &&
       github.actor == 'xiaoshengwpp' && github.triggering_actor == 'xiaoshengwpp' &&
       inputs.acknowledge_identity && inputs.acknowledge_github_artifact
     runs-on: ubuntu-latest
