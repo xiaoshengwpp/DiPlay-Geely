@@ -6,6 +6,21 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class ReviewRestoreContractTest(unittest.TestCase):
+    def test_public_credential_scan_captures_paths_before_execution(self):
+        text = (ROOT / 'mobile/build.gradle.kts').read_text()
+        task = text.split('val rejectBundledCredentials by tasks.registering {', 1)[1].split('tasks.named("preBuild")', 1)[0]
+        setup, action = task.split('    doLast {', 1)
+        self.assertIn('val inputPath = localAuthenticationInputPath', setup)
+        self.assertIn('val sourceRoot = rootProject.projectDir.canonicalFile', setup)
+        self.assertNotIn('rootProject', action)
+        self.assertNotIn('localAuthenticationInputPath', action)
+        self.assertIn('inputPath?.let', action)
+        self.assertIn('sourceRoot.toPath()', action)
+        self.assertIn('check(unexpected.isEmpty())', action)
+        self.assertIn('Files.isSymbolicLink', action)
+        self.assertIn('externalAssets?.files.orEmpty().all', action)
+        self.assertIn('dependsOn(rejectBundledCredentials)', text)
+
     def test_adb_credential_load_has_no_storage_or_key_generation(self):
         text = (ROOT / 'shared/src/main/java/com/shilapi/xcertplay/adb/AdbKeys.kt').read_text()
         for forbidden in ('java.io.File', 'KeyPairGenerator', 'KeyFactory',

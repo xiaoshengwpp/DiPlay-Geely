@@ -93,6 +93,9 @@ val credentialAssets = files(android.sourceSets.flatMap { source ->
 val rejectBundledCredentials by tasks.registering {
     group = "verification"
     description = "Reject unexpected credential files in APK assets."
+    // Capture plain path values during configuration; never retain the build script/Project in doLast.
+    val inputPath = localAuthenticationInputPath
+    val sourceRoot = rootProject.projectDir.canonicalFile
     val filesToCheck = credentialAssets
     val externalAssets = localAuthenticationAssets?.let { fileTree(it) }
     val allowed = localAuthenticationAssets?.let { dir ->
@@ -100,8 +103,8 @@ val rejectBundledCredentials by tasks.registering {
     } ?: emptySet()
     // Validate paths before Gradle asset merging; do not fingerprint private input contents here.
     doLast {
-        localAuthenticationInputPath?.let { input ->
-            check(!input.canonicalFile.toPath().startsWith(rootProject.projectDir.canonicalFile.toPath())) {
+        inputPath?.let { input ->
+            check(!input.canonicalFile.toPath().startsWith(sourceRoot.toPath())) {
                 "Keep runtime authentication inputs outside the source tree"
             }
             check(!Files.isSymbolicLink(input.toPath())) { "Runtime authentication root must not be a symlink" }
