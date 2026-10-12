@@ -30,9 +30,8 @@ internal data class AudioChannelSelection(
  *
  * Each selection carries the [AudioChannel] / [AudioContentType] pair used for usage-based
  * AudioAttributes, plus the stream type used when the stream-type AudioTrack path is active.
- * Guidance audio always resolves to [AudioChannel.NAVIGATION] so it can be routed away from the
- * media bus, and `default` / `compatibility` follow it in the automotive mode rather than
- * sharing the media bus.
+ * Guidance resolves to [AudioChannel.NAVIGATION]. Automotive routing keeps compatibility
+ * audio on the media bus, so it receives the configured media buffer and output route.
  */
 internal object AudioChannelMapper {
     const val STREAM_TYPE_MAIN_HIGH_AUDIO = 102
@@ -51,8 +50,32 @@ internal object AudioChannelMapper {
         }
     }
 
+    /** Null means no new channel selection: keep the legacy route, including stream 14. */
+    fun outputStreamOverride(
+        selection: AudioChannelSelection,
+        advanced: Boolean,
+        mediaChannel: Int,
+        navigationChannel: Int?,
+    ): Int = when (selection.channel) {
+        AudioChannel.MEDIA -> mediaChannel.takeIf { it in 0..20 } ?: 0
+        AudioChannel.NAVIGATION -> navigationChannel?.takeIf { it in 0..20 }
+            ?: if (advanced) 0 else selection.streamType
+        else -> 0
+    }
+
     fun usesNavigationStream(audioType: String, payloadType: Int, advanced: Boolean): Boolean =
         !advanced && map(audioType, payloadType, AudioChannelMappingMode.MOBILE_COMPATIBLE).channel == AudioChannel.NAVIGATION
+
+    /**
+     * When the car Bluetooth radio is off there is no SCO, so a CarPlay telephony stream has to
+     * play on the media speaker instead of the phone usage.
+     */
+    fun playCallOnSpeaker(selection: AudioChannelSelection): AudioChannelSelection =
+        if (selection.channel == AudioChannel.PHONE) {
+            AudioChannelSelection(AudioChannel.MEDIA, AudioContentType.SPEECH, selection.streamType)
+        } else {
+            selection
+        }
 
     private fun mapMobileCompatible(
         audioType: String,
@@ -76,9 +99,9 @@ internal object AudioChannelMapper {
         "telephony" -> AudioChannelSelection(AudioChannel.PHONE, AudioContentType.SPEECH)
         "speechrecognition" ->
             AudioChannelSelection(AudioChannel.ASSISTANT, AudioContentType.SPEECH)
-        "media" -> AudioChannelSelection(AudioChannel.MEDIA, AudioContentType.MUSIC)
-        "alert", "default", "compatibility" ->
-            AudioChannelSelection(AudioChannel.NAVIGATION, AudioContentType.SPEECH, navigationStreamType)
+        "media", "compatibility" ->
+            AudioChannelSelection(AudioChannel.MEDIA, AudioContentType.MUSIC)
+        "default", "alert" -> AudioChannelSelection(AudioChannel.NAVIGATION, AudioContentType.SPEECH, navigationStreamType)
         else -> mainHighAudioOrNavigation(payloadType, navigationStreamType)
     }
 

@@ -12,6 +12,7 @@ internal class BydFactoryNavigationOutput(private val context: Context) {
     private var logged = false
 
     fun update(icon: Int, exit: Int, distance: Int) {
+        if (!GeelyVendorPolicy.bydNavigation) return
         if (disabled || !context.packageName.endsWith(".bydhudtest") && !context.packageName.endsWith(".hudtest")) return
         val turn = BydFactoryTurnCode.map(icon, exit) ?: run { clear(); return }
         if (distance !in 0..16777214) { clear(); return }
@@ -43,6 +44,7 @@ internal class BydFactoryNavigationOutput(private val context: Context) {
     }
 
     fun clear() {
+        if (!GeelyVendorPolicy.bydNavigation) return
         if (!showing) return
         showing = false
         logged = false

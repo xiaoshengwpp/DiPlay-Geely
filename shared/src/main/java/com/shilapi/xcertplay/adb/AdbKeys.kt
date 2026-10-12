@@ -1,26 +1,19 @@
 package com.shilapi.xcertplay.adb
 
+import com.shilapi.xcertplay.hud.GeelyVendorPolicy
 import android.content.Context
-import java.io.File
+import com.shilapi.xcertplay.compat.Base64Compat
 import java.math.BigInteger
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import java.security.KeyFactory
 import java.security.KeyPair
-import java.security.KeyPairGenerator
 import java.security.PrivateKey
 import java.security.PublicKey
 import java.security.Signature
 import java.security.interfaces.RSAPublicKey
-import java.security.spec.PKCS8EncodedKeySpec
-import java.security.spec.X509EncodedKeySpec
-import java.util.Base64
 
-/** DiPlay's own ADB key: adbd remembers it after the driver approves it once. */
+/** ADB protocol helpers; credential loading is unavailable in this Geely build. */
 object AdbKeys {
-    private const val DIR = "adb"
-    private const val PRIVATE = "adbkey.private"
-    private const val PUBLIC = "adbkey.public"
     private const val KEY_BITS = 2048
     private const val NAME = " diplay@headunit"
 
@@ -29,24 +22,12 @@ object AdbKeys {
         0x30, 0x21, 0x30, 0x09, 0x06, 0x05, 0x2b, 0x0e, 0x03, 0x02, 0x1a, 0x05, 0x00, 0x04, 0x14,
     )
 
-    /** Loads the key from app-private storage, or makes one on first use. */
+    /** Retains the call contract without accessing storage or creating credentials. */
+    @Suppress("UNUSED_PARAMETER")
     @Synchronized
     fun load(context: Context): KeyPair {
-        val dir = File(context.noBackupFilesDir, DIR)
-        val privateFile = File(dir, PRIVATE)
-        val publicFile = File(dir, PUBLIC)
-        runCatching {
-            val factory = KeyFactory.getInstance("RSA")
-            return KeyPair(
-                factory.generatePublic(X509EncodedKeySpec(publicFile.readBytes())),
-                factory.generatePrivate(PKCS8EncodedKeySpec(privateFile.readBytes())),
-            )
-        }
-        val pair = KeyPairGenerator.getInstance("RSA").apply { initialize(KEY_BITS) }.generateKeyPair()
-        dir.mkdirs()
-        privateFile.writeBytes(pair.private.encoded)
-        publicFile.writeBytes(pair.public.encoded)
-        return pair
+        check(GeelyVendorPolicy.bydAdb) { "Local ADB is disabled for the Geely profile" }
+        error("ADB credential loading is unavailable in the Geely build")
     }
 
     fun sign(token: ByteArray, key: PrivateKey): ByteArray =
@@ -75,7 +56,7 @@ object AdbKeys {
             put(littleEndian(rr, KEY_BITS / 8))
             putInt(rsa.publicExponent.toInt())
         }.array()
-        return (Base64.getEncoder().encodeToString(blob) + NAME + "\u0000").toByteArray(Charsets.UTF_8)
+        return (Base64Compat.encode(blob) + NAME + "\u0000").toByteArray(Charsets.UTF_8)
     }
 
     private fun littleEndian(value: BigInteger, size: Int): ByteArray {

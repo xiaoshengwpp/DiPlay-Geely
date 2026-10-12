@@ -13,6 +13,7 @@ concurrency:
   cancel-in-progress: true
 jobs:
   deploy:
+    if: github.repository == 'shihabal3amri/DiPlay'
     runs-on: ubuntu-latest
     environment:
       name: github-pages

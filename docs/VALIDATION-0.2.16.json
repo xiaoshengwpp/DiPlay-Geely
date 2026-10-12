@@ -1,0 +1,158 @@
+{
+  "dateUTC": "2026-10-10T07:29:46.534409+00:00",
+  "upstreamCommit": "bac419695ca26b7e67d204a279333ca52132c2cb",
+  "product": "0.2.16-geely.1",
+  "buildInputManifestSha256": "d424c49417757eeb19bd136806242f1a6b6e7438cc1d3572677b3b641d32c7df",
+  "buildInputFiles": 1132,
+  "aggregate": {
+    "result": "BUILD SUCCESSFUL",
+    "tasks": [
+      ":shared:testDebugUnitTest",
+      ":common:testDebugUnitTest",
+      ":home:testDebugUnitTest",
+      ":mobile:lintDebug",
+      ":home:lintDebug",
+      ":maphost:lintDebug",
+      ":mobile:assembleDebug",
+      ":home:assembleDebug",
+      ":maphost:assembleDebug"
+    ],
+    "mode": "source-only, no signing, no authentication inputs, max-workers=1, Gradle heap1536MiB",
+    "unitTests": {
+      "shared": {
+        "suites": 198,
+        "tests": 1187,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "common": {
+        "suites": 146,
+        "tests": 1051,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "home": {
+        "suites": 1,
+        "tests": 4,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    }
+  },
+  "pythonContracts": {
+    "scripts": 22,
+    "uiBoundary": 9,
+    "failures": 0
+  },
+  "externalAssetPreflight": {
+    "inputs": "public non-credential plaintext placeholders only",
+    "apkBuild": false,
+    "signing": false,
+    "buildConfigurationSha256": "9bd32a4b95ba87b175fdb8f03d640f202143ff7bf7a70be442e797d0ce686e53",
+    "results": [
+      {
+        "case": "only-two-placeholder-files",
+        "task": ":mobile:rejectBundledCredentials",
+        "expected": "accept placeholder paths only",
+        "returnCode": 0,
+        "pass": true,
+        "diagnosticVerified": true
+      },
+      {
+        "case": "extra-unrecognized-extension",
+        "task": ":mobile:rejectBundledCredentials",
+        "expected": "reject",
+        "returnCode": 1,
+        "pass": true,
+        "diagnosticVerified": true
+      },
+      {
+        "case": "missing-file",
+        "task": ":mobile:rejectBundledCredentials",
+        "expected": "reject",
+        "returnCode": 1,
+        "pass": true,
+        "diagnosticVerified": true
+      },
+      {
+        "case": "nested-symlink",
+        "task": ":mobile:rejectBundledCredentials",
+        "expected": "reject",
+        "returnCode": 1,
+        "pass": true,
+        "diagnosticVerified": true
+      },
+      {
+        "case": "root-symlink",
+        "task": ":mobile:rejectBundledCredentials",
+        "expected": "reject",
+        "returnCode": 1,
+        "pass": true,
+        "diagnosticVerified": true
+      },
+      {
+        "case": "source-tree-directory",
+        "task": ":mobile:rejectBundledCredentials",
+        "expected": "reject",
+        "returnCode": 1,
+        "pass": true,
+        "diagnosticVerified": true
+      }
+    ]
+  },
+  "sourceDebugApk": {
+    "package": "io.github.xiaoshengwpp.diplay.geely.hudtest",
+    "versionCode": 35001,
+    "versionName": "0.2.16-geely.1-hud-test",
+    "sha256": "624154916d412e7e4779a75ed1979967847bd0b4a0d03dbb64eb55af0e78569a",
+    "bytes": 24488609,
+    "abis": [
+      "arm64-v8a",
+      "armeabi-v7a",
+      "x86_64"
+    ],
+    "authenticationAssetsPresent": false,
+    "signed": false,
+    "signatureVerification": "DOES NOT VERIFY; Missing META-INF/MANIFEST.MF",
+    "deliveryArtifact": false
+  },
+  "previousRuns": [
+    {
+      "name": "initial",
+      "shared": "1183 tests / 10 failures",
+      "common": "1053 / 374",
+      "commonFailureClassification": "188 Mockito startup instrumentation,186 other product/locale expectations",
+      "home": "4 /0"
+    },
+    {
+      "name": "aggregate-r2",
+      "result": "daemon disappeared; incomplete, cause unconfirmed"
+    },
+    {
+      "name": "focused-r3",
+      "tests": 91,
+      "failures": 0,
+      "includes": "network fixture, host locale lifecycle, metadata placeholder, SmoothVideo resource-lifetime tests"
+    },
+    {
+      "name": "aggregate-r3",
+      "common": "1051 /2, both obsolete BYD call-state expectation on two SDKs"
+    },
+    {
+      "name": "wheel-siri-final",
+      "tests": 20,
+      "failures": 0
+    }
+  ],
+  "independentReview": "Source boundaries, nullable audio renderer wiring, credential allowlist, and test-diff preservation reviewed; final fixture delta separately reported.",
+  "notValidated": [
+    "legitimate runtime authentication",
+    "release signing",
+    "GitHub publication",
+    "Xingyue L installation and actual hardware",
+    "iPhone CarPlay connection"
+  ]
+}

@@ -7,6 +7,7 @@ import android.content.Intent
 /** Only the shell (DUMP permission) can provision this temporary test bridge. */
 class StarterBridgeReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
+        if (!GeelyVendorPolicy.bydDiagnostics) return
         when (intent.action) {
             "byd.hud.STARTER_CONFIG" -> {
                 BydStarterBridge.configure(context, intent.getStringExtra("token") ?: return)

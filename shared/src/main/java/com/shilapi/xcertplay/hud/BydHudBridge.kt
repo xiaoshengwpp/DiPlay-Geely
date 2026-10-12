@@ -27,9 +27,9 @@ internal object BydHudBridge {
     private const val TX_FIRE_EVENT = 6
     private const val ICON_ASSET_DIR = "byd-hud-icons"
 
-    private val callbacks = Executors.newSingleThreadExecutor { task ->
+    private val callbacks by lazy { Executors.newSingleThreadExecutor { task ->
         Thread(task, "diplay-hud-callback").apply { isDaemon = true }
-    }
+    } }
     private val lock = Any()
     private val route = BydHudRouteState()
     private var context: Context? = null
@@ -71,6 +71,7 @@ internal object BydHudBridge {
     }
 
     fun initialize(appContext: Context) = synchronized(lock) {
+        if (!GeelyVendorPolicy.bydNavigation) return@synchronized
         if (context == null) context = appContext.applicationContext
         bindLocked()
         if (!senderStarted) {
@@ -82,6 +83,7 @@ internal object BydHudBridge {
     }
 
     fun onFrame(frame: Iap2Frame) = synchronized(lock) {
+        if (!GeelyVendorPolicy.bydNavigation) return@synchronized
         val change = route.accept(frame.messageId, frame.payload)
         if (frame.messageId == BydHudRouteState.ROUTE_GUIDANCE_UPDATE ||
             frame.messageId == BydHudRouteState.ROUTE_GUIDANCE_MANEUVER_UPDATE
@@ -99,11 +101,13 @@ internal object BydHudBridge {
     fun clearNow() = clear()
 
     fun clear() = synchronized(lock) {
+        if (!GeelyVendorPolicy.bydNavigation) return@synchronized
         route.clear()
         clearHudLocked()
     }
 
     private fun tick() = synchronized(lock) {
+        if (!GeelyVendorPolicy.bydNavigation) return@synchronized
         if (binder == null && !binding) bindLocked()
         sendCurrentLocked()
     }
@@ -111,6 +115,7 @@ internal object BydHudBridge {
     private fun enabled(): Boolean = context?.let(BydOutputSettings::enabled) ?: false
 
     private fun sendCurrentLocked() {
+        if (!GeelyVendorPolicy.bydNavigation) return
         if (binder == null || !started) return
         if (!enabled()) {
             clearHudLocked()
@@ -136,6 +141,7 @@ internal object BydHudBridge {
     }
 
     private fun clearHudLocked() {
+        if (!GeelyVendorPolicy.bydNavigation) return
         if (!showing) return
         if (!sendLocked(BydHudPayload.clear())) return
         showing = false
@@ -160,6 +166,7 @@ internal object BydHudBridge {
     }
 
     private fun bindLocked() {
+        if (!GeelyVendorPolicy.bydNavigation) return
         val appContext = context ?: return
         if (binder != null || binding) return
         try {
@@ -177,6 +184,7 @@ internal object BydHudBridge {
     }
 
     private fun onGatewayCallback(action: () -> Unit) {
+        if (!GeelyVendorPolicy.bydNavigation) return
         callbacks.execute {
             synchronized(lock) {
                 runCatching(action).onFailure { Log.w(TAG, "gateway callback failed", it) }
@@ -208,6 +216,7 @@ internal object BydHudBridge {
     }
 
     private inline fun transactLocked(code: Int, returnsValue: Boolean = true, write: (Parcel) -> Unit): Int {
+        if (!GeelyVendorPolicy.bydNavigation) return -1
         val target = binder ?: return -1
         val data = Parcel.obtain()
         val reply = Parcel.obtain()
@@ -227,6 +236,7 @@ internal object BydHudBridge {
     }
 
     private fun sendLocked(payload: ByteArray): Boolean {
+        if (!GeelyVendorPolicy.bydNavigation) return false
         if (binder == null) return false
         val result = transactLocked(TX_FIRE_EVENT) {
             it.writeInt(1)
@@ -246,6 +256,7 @@ internal object BydHudBridge {
     }
 
     private fun resetBindingLocked() {
+        if (!GeelyVendorPolicy.bydNavigation) return
         val appContext = context
         if (appContext != null && binding) {
             runCatching { appContext.unbindService(connection) }

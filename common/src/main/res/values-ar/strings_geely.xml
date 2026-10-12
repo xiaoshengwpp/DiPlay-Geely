@@ -1,0 +1,5 @@
+<resources>
+    <string name="byd_integration_disabled_geely">تم تعطيل ميزات سيارات BYD في هذا الإصدار التجريبي لسيارات جيلي.</string>
+    <string name="geely_navigation_audio_retained">الاحتفاظ بإعدادات صوت الملاحة الحالية</string>
+    <string name="geely_upstream_update_disabled">تم تعطيل تحديثات APK الرسمية للمشروع الأصلي في هذا الإصدار التجريبي لسيارات جيلي لأنها لا تحافظ على قيود سلامة وظائف السيارة في هذا الإصدار.</string>
+</resources>

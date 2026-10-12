@@ -1,0 +1,382 @@
+[
+  {
+    "file": "common/src/test/java/com/shilapi/xcertplay/AdaptiveSettingsUiTest.kt",
+    "upstreamTestAnnotations": 42,
+    "geelyTestAnnotations": 42
+  },
+  {
+    "file": "common/src/test/java/com/shilapi/xcertplay/AdbClusterSelectionTest.kt",
+    "upstreamTestAnnotations": 7,
+    "geelyTestAnnotations": 7
+  },
+  {
+    "file": "common/src/test/java/com/shilapi/xcertplay/AirPlayEventSocketTest.kt",
+    "upstreamTestAnnotations": 0,
+    "geelyTestAnnotations": 2
+  },
+  {
+    "file": "common/src/test/java/com/shilapi/xcertplay/AmbientMusicSettingsUiTest.kt",
+    "upstreamTestAnnotations": 3,
+    "geelyTestAnnotations": 3
+  },
+  {
+    "file": "common/src/test/java/com/shilapi/xcertplay/AudioChannelPersistenceTest.kt",
+    "upstreamTestAnnotations": 10,
+    "geelyTestAnnotations": 10
+  },
+  {
+    "file": "common/src/test/java/com/shilapi/xcertplay/BydAdbSettingsUiTest.kt",
+    "upstreamTestAnnotations": 7,
+    "geelyTestAnnotations": 7
+  },
+  {
+    "file": "common/src/test/java/com/shilapi/xcertplay/BydSettingsReconnectTest.kt",
+    "upstreamTestAnnotations": 7,
+    "geelyTestAnnotations": 7
+  },
+  {
+    "file": "common/src/test/java/com/shilapi/xcertplay/BydVehicleDataSettingsTest.kt",
+    "upstreamTestAnnotations": 34,
+    "geelyTestAnnotations": 34
+  },
+  {
+    "file": "common/src/test/java/com/shilapi/xcertplay/CarHotspotAdbGrantTest.kt",
+    "upstreamTestAnnotations": 10,
+    "geelyTestAnnotations": 10
+  },
+  {
+    "file": "common/src/test/java/com/shilapi/xcertplay/CarHotspotFallbackTest.kt",
+    "upstreamTestAnnotations": 6,
+    "geelyTestAnnotations": 6
+  },
+  {
+    "file": "common/src/test/java/com/shilapi/xcertplay/CarHotspotSecuritySettingsTest.kt",
+    "upstreamTestAnnotations": 4,
+    "geelyTestAnnotations": 4
+  },
+  {
+    "file": "common/src/test/java/com/shilapi/xcertplay/CarHotspotSetupTest.kt",
+    "upstreamTestAnnotations": 11,
+    "geelyTestAnnotations": 11
+  },
+  {
+    "file": "common/src/test/java/com/shilapi/xcertplay/CarHotspotSwitchTest.kt",
+    "upstreamTestAnnotations": 14,
+    "geelyTestAnnotations": 14
+  },
+  {
+    "file": "common/src/test/java/com/shilapi/xcertplay/CarPlayBonjourServiceAvailabilityTest.kt",
+    "upstreamTestAnnotations": 0,
+    "geelyTestAnnotations": 2
+  },
+  {
+    "file": "common/src/test/java/com/shilapi/xcertplay/CarPlayCallControlsOptInTest.kt",
+    "upstreamTestAnnotations": 2,
+    "geelyTestAnnotations": 2
+  },
+  {
+    "file": "common/src/test/java/com/shilapi/xcertplay/CarPlayHostDisplaySizeTest.kt",
+    "upstreamTestAnnotations": 31,
+    "geelyTestAnnotations": 31
+  },
+  {
+    "file": "common/src/test/java/com/shilapi/xcertplay/CarPlayHostSettingsTest.kt",
+    "upstreamTestAnnotations": 34,
+    "geelyTestAnnotations": 34
+  },
+  {
+    "file": "common/src/test/java/com/shilapi/xcertplay/CarPlayMediaMetadataPublicationTest.kt",
+    "upstreamTestAnnotations": 0,
+    "geelyTestAnnotations": 4
+  },
+  {
+    "file": "common/src/test/java/com/shilapi/xcertplay/CarPlayVpnConsentTest.kt",
+    "upstreamTestAnnotations": 8,
+    "geelyTestAnnotations": 8
+  },
+  {
+    "file": "common/src/test/java/com/shilapi/xcertplay/CenterMapOverlayTest.kt",
+    "upstreamTestAnnotations": 12,
+    "geelyTestAnnotations": 7
+  },
+  {
+    "file": "common/src/test/java/com/shilapi/xcertplay/ClusterActivityOutputTest.kt",
+    "upstreamTestAnnotations": 6,
+    "geelyTestAnnotations": 6
+  },
+  {
+    "file": "common/src/test/java/com/shilapi/xcertplay/ClusterCalibrationRouteTest.kt",
+    "upstreamTestAnnotations": 4,
+    "geelyTestAnnotations": 4
+  },
+  {
+    "file": "common/src/test/java/com/shilapi/xcertplay/ClusterMapPresentationTest.kt",
+    "upstreamTestAnnotations": 17,
+    "geelyTestAnnotations": 17
+  },
+  {
+    "file": "common/src/test/java/com/shilapi/xcertplay/ClusterMapScaleCapabilityTest.kt",
+    "upstreamTestAnnotations": 9,
+    "geelyTestAnnotations": 9
+  },
+  {
+    "file": "common/src/test/java/com/shilapi/xcertplay/ClusterSafeAreaPersistenceTest.kt",
+    "upstreamTestAnnotations": 2,
+    "geelyTestAnnotations": 2
+  },
+  {
+    "file": "common/src/test/java/com/shilapi/xcertplay/ClusterSettingsConsentTest.kt",
+    "upstreamTestAnnotations": 4,
+    "geelyTestAnnotations": 5
+  },
+  {
+    "file": "common/src/test/java/com/shilapi/xcertplay/ExistingWifiManagerTest.kt",
+    "upstreamTestAnnotations": 14,
+    "geelyTestAnnotations": 14
+  },
+  {
+    "file": "common/src/test/java/com/shilapi/xcertplay/ExistingWifiSettingsTest.kt",
+    "upstreamTestAnnotations": 3,
+    "geelyTestAnnotations": 3
+  },
+  {
+    "file": "common/src/test/java/com/shilapi/xcertplay/GeelyHomeUiTest.kt",
+    "upstreamTestAnnotations": 0,
+    "geelyTestAnnotations": 3
+  },
+  {
+    "file": "common/src/test/java/com/shilapi/xcertplay/GeelyLatestBoundaryTest.kt",
+    "upstreamTestAnnotations": 0,
+    "geelyTestAnnotations": 9
+  },
+  {
+    "file": "common/src/test/java/com/shilapi/xcertplay/GeelyProfileSettingsTest.kt",
+    "upstreamTestAnnotations": 0,
+    "geelyTestAnnotations": 2
+  },
+  {
+    "file": "common/src/test/java/com/shilapi/xcertplay/GeelyVideoBoundaryTest.kt",
+    "upstreamTestAnnotations": 0,
+    "geelyTestAnnotations": 5
+  },
+  {
+    "file": "common/src/test/java/com/shilapi/xcertplay/HotspotJoinControlsTest.kt",
+    "upstreamTestAnnotations": 4,
+    "geelyTestAnnotations": 4
+  },
+  {
+    "file": "common/src/test/java/com/shilapi/xcertplay/InterfaceSizeActivityTest.kt",
+    "upstreamTestAnnotations": 4,
+    "geelyTestAnnotations": 4
+  },
+  {
+    "file": "common/src/test/java/com/shilapi/xcertplay/LocationReportingPolicyTest.kt",
+    "upstreamTestAnnotations": 0,
+    "geelyTestAnnotations": 1
+  },
+  {
+    "file": "common/src/test/java/com/shilapi/xcertplay/MapEmbedServiceTest.kt",
+    "upstreamTestAnnotations": 1,
+    "geelyTestAnnotations": 2
+  },
+  {
+    "file": "common/src/test/java/com/shilapi/xcertplay/NavigationAudioMigrationTest.kt",
+    "upstreamTestAnnotations": 0,
+    "geelyTestAnnotations": 6
+  },
+  {
+    "file": "common/src/test/java/com/shilapi/xcertplay/NavigationChannelSelectionTest.kt",
+    "upstreamTestAnnotations": 0,
+    "geelyTestAnnotations": 4
+  },
+  {
+    "file": "common/src/test/java/com/shilapi/xcertplay/NightModeSettingsTest.kt",
+    "upstreamTestAnnotations": 8,
+    "geelyTestAnnotations": 8
+  },
+  {
+    "file": "common/src/test/java/com/shilapi/xcertplay/SmoothVideoHostLifecycleTest.kt",
+    "upstreamTestAnnotations": 6,
+    "geelyTestAnnotations": 6
+  },
+  {
+    "file": "common/src/test/java/com/shilapi/xcertplay/UsbAutoConfirmServiceTest.kt",
+    "upstreamTestAnnotations": 6,
+    "geelyTestAnnotations": 6
+  },
+  {
+    "file": "common/src/test/java/com/shilapi/xcertplay/UsbPermissionSetupTest.kt",
+    "upstreamTestAnnotations": 15,
+    "geelyTestAnnotations": 15
+  },
+  {
+    "file": "common/src/test/java/com/shilapi/xcertplay/VirtualClusterDisplayTest.kt",
+    "upstreamTestAnnotations": 2,
+    "geelyTestAnnotations": 2
+  },
+  {
+    "file": "common/src/test/java/com/shilapi/xcertplay/WaitingScreenThemeTest.kt",
+    "upstreamTestAnnotations": 0,
+    "geelyTestAnnotations": 5
+  },
+  {
+    "file": "common/src/test/java/com/shilapi/xcertplay/WheelJoystickSessionTest.kt",
+    "upstreamTestAnnotations": 13,
+    "geelyTestAnnotations": 13
+  },
+  {
+    "file": "common/src/test/java/com/shilapi/xcertplay/WheelKeyPermissionSetupTest.kt",
+    "upstreamTestAnnotations": 10,
+    "geelyTestAnnotations": 10
+  },
+  {
+    "file": "common/src/test/java/com/shilapi/xcertplay/WheelKeyServiceTest.kt",
+    "upstreamTestAnnotations": 23,
+    "geelyTestAnnotations": 23
+  },
+  {
+    "file": "common/src/test/java/com/shilapi/xcertplay/WheelSiriWindowTest.kt",
+    "upstreamTestAnnotations": 10,
+    "geelyTestAnnotations": 10
+  },
+  {
+    "file": "common/src/test/java/com/shilapi/xcertplay/WifiDirectChannelSettingsTest.kt",
+    "upstreamTestAnnotations": 5,
+    "geelyTestAnnotations": 5
+  },
+  {
+    "file": "common/src/test/java/com/shilapi/xcertplay/update/UpdateClientTest.kt",
+    "upstreamTestAnnotations": 4,
+    "geelyTestAnnotations": 4
+  },
+  {
+    "file": "common/src/test/java/com/shilapi/xcertplay/update/UpdateInstallCompatibilityTest.kt",
+    "upstreamTestAnnotations": 1,
+    "geelyTestAnnotations": 1
+  },
+  {
+    "file": "shared/src/test/java/com/shilapi/xcertplay/adb/LocalAdbApprovalTest.kt",
+    "upstreamTestAnnotations": 3,
+    "geelyTestAnnotations": 3
+  },
+  {
+    "file": "shared/src/test/java/com/shilapi/xcertplay/adb/LocalAdbTest.kt",
+    "upstreamTestAnnotations": 6,
+    "geelyTestAnnotations": 7
+  },
+  {
+    "file": "shared/src/test/java/com/shilapi/xcertplay/hud/BluetoothSuspendLifecycleTest.kt",
+    "upstreamTestAnnotations": 10,
+    "geelyTestAnnotations": 4
+  },
+  {
+    "file": "shared/src/test/java/com/shilapi/xcertplay/hud/Byd13CatalogProbeTest.kt",
+    "upstreamTestAnnotations": 19,
+    "geelyTestAnnotations": 7
+  },
+  {
+    "file": "shared/src/test/java/com/shilapi/xcertplay/hud/BydBatteryReadinessTest.kt",
+    "upstreamTestAnnotations": 5,
+    "geelyTestAnnotations": 5
+  },
+  {
+    "file": "shared/src/test/java/com/shilapi/xcertplay/hud/BydBatteryTest.kt",
+    "upstreamTestAnnotations": 10,
+    "geelyTestAnnotations": 5
+  },
+  {
+    "file": "shared/src/test/java/com/shilapi/xcertplay/hud/BydCarPlayCallLifecycleTest.kt",
+    "upstreamTestAnnotations": 21,
+    "geelyTestAnnotations": 4
+  },
+  {
+    "file": "shared/src/test/java/com/shilapi/xcertplay/hud/BydClusterMapPauseTest.kt",
+    "upstreamTestAnnotations": 2,
+    "geelyTestAnnotations": 1
+  },
+  {
+    "file": "shared/src/test/java/com/shilapi/xcertplay/hud/BydClusterSongNoteTest.kt",
+    "upstreamTestAnnotations": 5,
+    "geelyTestAnnotations": 5
+  },
+  {
+    "file": "shared/src/test/java/com/shilapi/xcertplay/hud/BydClusterSongTimerTest.kt",
+    "upstreamTestAnnotations": 13,
+    "geelyTestAnnotations": 5
+  },
+  {
+    "file": "shared/src/test/java/com/shilapi/xcertplay/hud/BydOptionalOutputSettingsTest.kt",
+    "upstreamTestAnnotations": 2,
+    "geelyTestAnnotations": 2
+  },
+  {
+    "file": "shared/src/test/java/com/shilapi/xcertplay/hud/BydTyresTest.kt",
+    "upstreamTestAnnotations": 4,
+    "geelyTestAnnotations": 4
+  },
+  {
+    "file": "shared/src/test/java/com/shilapi/xcertplay/hud/CarPlayCallWritesTest.kt",
+    "upstreamTestAnnotations": 8,
+    "geelyTestAnnotations": 6
+  },
+  {
+    "file": "shared/src/test/java/com/shilapi/xcertplay/hud/ClusterTurnOverlayExpiryTest.kt",
+    "upstreamTestAnnotations": 5,
+    "geelyTestAnnotations": 4
+  },
+  {
+    "file": "shared/src/test/java/com/shilapi/xcertplay/hud/DiLink3ClusterRecoveryTest.kt",
+    "upstreamTestAnnotations": 4,
+    "geelyTestAnnotations": 1
+  },
+  {
+    "file": "shared/src/test/java/com/shilapi/xcertplay/hud/GeelyAmbientAndCallBoundaryTest.kt",
+    "upstreamTestAnnotations": 0,
+    "geelyTestAnnotations": 7
+  },
+  {
+    "file": "shared/src/test/java/com/shilapi/xcertplay/hud/GeelyHardwareBoundary0216Test.kt",
+    "upstreamTestAnnotations": 0,
+    "geelyTestAnnotations": 6
+  },
+  {
+    "file": "shared/src/test/java/com/shilapi/xcertplay/hud/GeelyVendorBoundaryTest.kt",
+    "upstreamTestAnnotations": 0,
+    "geelyTestAnnotations": 7
+  },
+  {
+    "file": "shared/src/test/java/com/shilapi/xcertplay/hud/VehicleProbeBatteryConcurrencyTest.kt",
+    "upstreamTestAnnotations": 5,
+    "geelyTestAnnotations": 1
+  },
+  {
+    "file": "shared/src/test/java/com/shilapi/xcertplay/hud/VehicleProbePublicationSafetyTest.kt",
+    "upstreamTestAnnotations": 1,
+    "geelyTestAnnotations": 1
+  },
+  {
+    "file": "shared/src/test/java/com/shilapi/xcertplay/media/GeelyNavigationRendererTest.kt",
+    "upstreamTestAnnotations": 0,
+    "geelyTestAnnotations": 3
+  },
+  {
+    "file": "shared/src/test/java/com/shilapi/xcertplay/media/NavigationRouteMigrationTest.kt",
+    "upstreamTestAnnotations": 0,
+    "geelyTestAnnotations": 6
+  },
+  {
+    "file": "shared/src/test/java/com/shilapi/xcertplay/media/TelephonyMicrophoneTest.kt",
+    "upstreamTestAnnotations": 28,
+    "geelyTestAnnotations": 28
+  },
+  {
+    "file": "shared/src/test/java/com/shilapi/xcertplay/network/GeelyCoreBoundaryTest.kt",
+    "upstreamTestAnnotations": 0,
+    "geelyTestAnnotations": 5
+  },
+  {
+    "file": "shared/src/test/java/com/shilapi/xcertplay/network/WifiScanPauseTest.kt",
+    "upstreamTestAnnotations": 5,
+    "geelyTestAnnotations": 5
+  }
+]

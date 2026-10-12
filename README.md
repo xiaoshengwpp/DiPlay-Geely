@@ -1,17 +1,33 @@
 # DiPlay-Geely · 吉利车机社区适配
 
-本仓库直接 fork 自 [shihabal3amri/DiPlay](https://github.com/shihabal3amri/DiPlay)，面向 **吉利星越 L 2025 款及吉利银河车机**开展社区适配，欢迎车主、开发者和测试者一起共建。
+本仓库直接 fork 自 [shihabal3amri/DiPlay](https://github.com/shihabal3amri/DiPlay)，面向 **吉利星越 L 2025 款（揽星）**开展社区适配，欢迎车主、开发者和测试者一起共建。“银河车机”只描述该目标车辆的系统背景，不表示覆盖银河品牌其他车型。
 
-**当前阶段：适配准备中，尚未实车验证。** 目前仅建立 fork 和适配说明，尚未发布本分支的吉利适配 APK，也不声明任何车型已支持。上游主要支持 BYD；其兼容性结论不能直接套用于吉利。吉利银河不同车型、硬件和固件需要分别验证。
+**当前阶段：源码适配中，尚未实车验证。** 已在源码中隔离比亚迪专属能力并设置简体中文默认语言；尚未发布本分支的可安装 APK，也不声明任何车型已兼容。正式打包仍需所有者在私有构建环境安全提供既有、来源及授权明确的运行时认证资产和稳定 APK 签名输入。上游主要支持 BYD；其兼容性结论不能直接套用于星越 L。
 
-Community adaptation for Geely Xingyue L (2025) and Geely Galaxy head units. Experimental, not yet vehicle-tested; no verified Geely compatibility or adaptation release is claimed.
+Community adaptation for the Geely Xingyue L 2025 Lanxing trim only. Not yet vehicle-tested; no verified compatibility or installable release is claimed. Galaxy references describe this target's head-unit background, not support for other Galaxy models.
+
+## 版本与下载
+
+本分支沿用原始上游版本，只增加星越 L 适配小版本：当前源码版本为 **`0.2.16-geely.1`**，发布标签为 **`v0.2.16-geely.1`**。同一上游版本后续为 `.2`、`.3`；升级原始上游版本时，适配序号从 `.1` 重新开始。版本源为 [`gradle/geely-version.properties`](gradle/geely-version.properties)，不按日期、构建次数或分支名生成。
+
+- 可安装 APK 统一在[本仓库 GitHub Releases](https://github.com/xiaoshengwpp/DiPlay-Geely/releases)发布，使用普通 Release；`geely` 后缀表示适配分支，不强制标记 GitHub pre-release，也不另设“测试包”发布渠道
+- 发布包使用稳定签名与完整的获授权运行时输入；源码 CI 产物是无签名、无运行时认证的构建检查结果，不能当作可安装交付物
+- Android `versionCode = 原始上游 versionCode × 1000 + 适配序号`。当前上游为 `35`，所以本版为 `35001`；适配序号范围为 `1–999`。发布后不得重用版本号或替换同标签 APK；每次正式发布须确认代码值高于上一版
+- 普通 Release 是发布形式，不是兼容性认证。每版说明须列出已测 / 未测项目、目标车机固件与已知限制；目前所有实车连接、音频及交互验证仍为未测
+
+构建和发布步骤见 [BUILD](docs/BUILD.md) 与 [RELEASE](docs/BUILD.md)。**目前没有已发布的本分支可安装 APK**；不要把上游下载链接或源码构建产物误当成本分支发布。
+
+### 安装与升级
+
+本分支独立包名为 `io.github.xiaoshengwpp.diplay.geely`，桌面名称为“DiPlay 星越 L”（其他语言为“DiPlay Geely”）。Kotlin / Java 命名空间仍保留上游，不影响独立安装。它可与使用不同包名的上游或中文 fork 并存；不要同时运行多个投屏应用争用 USB、音频或无线连接。
+
+第一次安装本分支会建立独立应用数据、权限和连接设置，**不会覆盖上游，也不会自动迁移其数据**。不要为了安装本分支先卸载旧应用。将来本分支之间升级须保持相同包名和签名证书，并使用更高的 `versionCode`；不能用新签名覆盖旧签名。开发用 debug 包仍独立隔离，不作为另一条用户发布渠道。所有安装和验证都在安全停车后进行。
 
 ## 兼容性记录
 
 | 目标车型 / 范围 | 车机硬件 / 固件 | 连接、音频及交互验证 | 状态 |
 | --- | --- | --- | --- |
 | 吉利星越 L 2025 款（揽星） | 待补充准确版本 | 尚未实测 | 适配准备中 / 未验证 |
-| 吉利银河车机（具体车型待补充） | 待按车型与版本分别记录 | 尚未实测 | 适配准备中 / 未验证 |
 
 不得以某一车型或固件的结果推断整个车系可用。仪表、HUD、方向盘按键和车辆数据等厂商专属功能均需单独验证。
 
@@ -19,11 +35,11 @@ Community adaptation for Geely Xingyue L (2025) and Geely Galaxy head units. Exp
 
 吉利相关问题请提交到 **[本仓库 Issues](https://github.com/xiaoshengwpp/DiPlay-Geely/issues)**，先搜索是否已有同车型、同固件问题，再选择 [故障反馈或兼容性记录](https://github.com/xiaoshengwpp/DiPlay-Geely/issues/new/choose)。已有议题可补充新版本与复现结果；不同问题请分开提交。文档修正和代码改进也欢迎 Pull Request。
 
-**所有连接测试、录屏、日志导出和设置变更都应在车辆安全停放时完成，驾驶中不要操作或排障。** 星越 L 2025 款（揽星）及银河车型仍处于适配准备 / 未验证阶段；个人测试通过只代表该车型、硬件、固件和应用版本的组合，不等于整个车系正式支持。上游 APK 和其他 fork 的结果请明确标注来源，不要当成本仓库已发布的吉利版本；本仓库尚无吉利适配 APK，默认源码构建不包含运行时 CarPlay 协议认证资产（与 APK 签名不同），也不能据此承诺可直接连接车辆。自行构建若提示认证不可用 / 无法开始连接，可能是构建缺少该组件，不能直接归因于吉利固件；请报告构建来源与提示，不要上传认证资产或密钥。
+**所有连接测试、录屏、日志导出和设置变更都应在车辆安全停放时完成，驾驶中不要操作或排障。** 星越 L 2025 款（揽星）仍处于适配准备 / 未验证阶段；个人测试通过只代表该车型、硬件、固件和应用版本的组合，不等于整个车系正式支持。上游 APK 和其他 fork 的结果请明确标注来源，不要当成本仓库已发布的吉利版本；本仓库尚无可安装发布，默认源码构建不包含运行时 CarPlay 协议认证资产（与 APK 签名不同），也不能据此承诺可直接连接车辆。自行构建若提示认证不可用 / 无法开始连接，可能是构建缺少该组件，不能直接归因于吉利固件；请报告构建来源与提示，不要上传认证资产或密钥。
 
 ### 1. 先记录现象与版本
 
-- 车型、年款、配置（例如星越 L 2025 款揽星；银河请写具体车型）
+- 车型、年款、配置（本分支目标为星越 L 2025 款揽星；其他车型的反馈不代表纳入支持范围）
 - 车机硬件 / 芯片、系统名称、完整固件版本、Android 版本；不知道的写“未知”，截图须遮盖个人信息
 - 应用版本、下载来源 / 发布页链接；自行构建请附仓库、分支和提交 SHA
 - iPhone 型号、完整 iOS 版本、测试日期、问题发生时间及时区
@@ -38,9 +54,9 @@ Community adaptation for Geely Xingyue L (2025) and Geely Galaxy head units. Exp
 
 1. 安全停车后，记录时间并复现一次问题，尽快返回 **DiPlay 首页 → 设置 → 诊断 → 保存诊断报告**（英文：Settings → Diagnostics → Save diagnostic report）。无需先开启“在屏幕上显示调试日志”。
 2. **Android 10 及以上：** 默认保存到下载目录的 `DiPlay` 子目录，应用成功提示显示为 `Downloads/DiPlay/DiPlay-时间戳.txt`；文件管理器可能显示“下载”或 `Download`。
-3. **Android 9：** 系统会要求选择保存位置。所有版本也可点 **选择保存位置**（Choose save location）自行选择目录，依赖车机提供文件选择器。
+3. **Android 7.1–9：** 系统会要求选择保存位置。所有版本也可点 **选择保存位置**（Choose save location）自行选择目录，依赖车机提供文件选择器。
 4. 看到 **诊断报告已保存** 后，先用文件管理器查看，或通过 **分享** 转到自己的设备审查。分享入口不可用时，从保存目录取出文件；报告不会自动上传。
-5. 保存失败请记录完整提示和发生步骤；Android 10+ 的文件选择器打不开时可试默认“保存诊断报告”，默认保存失败可试“选择保存位置”。Android 9 若没有文件选择器，请在议题注明“无法导出”，附版本和错误截图即可，不要为此 root 或绕过车机权限限制。
+5. 保存失败请记录完整提示和发生步骤；Android 10+ 的文件选择器打不开时可试默认“保存诊断报告”，默认保存失败可试“选择保存位置”。Android 7.1–9 若没有文件选择器，请在议题注明“无法导出”，附版本和错误截图即可，不要为此 root 或绕过车机权限限制。
 
 **日志保留范围：** 应用在会话运行时写入本地有限日志，导出会包含仍存在的当前文件及最多 7 份轮转文件。新会话或文件超过约 512 KiB 会触发轮转，旧记录可能被覆盖；不是按天保存，不能保证找回几天前的问题。报告还含最近一次显示协商信息，请用时间戳区分当前设置与旧记录。问题后尽快导出；导出前不要清除应用数据或卸载，反复重连也可能覆盖所需记录。
 
@@ -70,19 +86,27 @@ Community adaptation for Geely Xingyue L (2025) and Geely Galaxy head units. Exp
 
 ## 上游 README（原文保留）
 
+# DiPlay Geely 0.2.16
+
+Based on the complete official `v0.2.16` source (`bac419695ca26b7e67d204a279333ca52132c2cb`), with Geely safety boundaries. BYD/DiLink hardware writes, dashboard-map sharing, parked-video, automatic ADB/permission changes and official-package installation are disabled. Chinese is the fresh-install default; saved language and audio routes are preserved. Vehicle compatibility is not yet verified.
+
+See [Geely integration and validation](docs/GEELY-0.2.16-REVIEW.md) and [build instructions](docs/BUILD.md). Source-only APKs are unsigned, identity-free validation outputs, not completed standalone CarPlay releases. The upstream documentation below describes the base project; BYD-specific features are not enabled in this Geely profile.
+
+---
+
 # DiPlay
 
 **CarPlay for compatible BYD Android head units.** Wired and wireless, with the familiar DiAuto interface. Independent app: `com.shihab.diplay`.
 
 > **BYD support scope:** These projects focus on BYD cars. They may work on other brands, but other brands are unsupported and there are no plans to add support or fix brand-specific incompatibilities.
 
-[Download & website](https://shihabal3amri.github.io/DiPlay/) · [Release](https://github.com/shihabal3amri/DiPlay/releases/tag/v0.2.7) · [Report a problem](https://github.com/shihabal3amri/DiPlay/issues/new/choose)
+[Download & website](https://shihabal3amri.github.io/DiPlay/) · [Release](https://github.com/shihabal3amri/DiPlay/releases/tag/v0.2.16) · [Report a problem](https://github.com/shihabal3amri/DiPlay/issues/new/choose)
 
 ![DiPlay home](site/assets/home.png)
 
-## 0.2.7 — public preview
+## 0.2.16 — public preview
 
-Install on the **car**, not the iPhone. No jailbreak, dongle, Mac, account or authentication server is required for use. Core CarPlay does not require ADB; the optional dashboard-mode and battery features do. Your head unit must permit APK installation. Wireless supports Wi-Fi Direct or the car’s existing hotspot; Wi-Fi Direct requires Android 10+; the APK supports Android 9+ for wired use.
+Install on the **car**, not the iPhone. No jailbreak, dongle, Mac, account or authentication server is required for use. Core CarPlay does not require ADB; optional dashboard, battery, wheel-speed and parked-video features do. Your head unit must permit APK installation. The APK supports Android 7.1+ (API 25); Android 7.1–8.1 support is not yet confirmed on a vehicle. Wireless supports Wi-Fi Direct, the car’s existing hotspot or Existing Wi-Fi / Same LAN. Android 7.1–9 Wi-Fi Direct uses a firmware-dependent legacy path with generated group credentials and unverified requested frequency; see [Android 9 Wi-Fi Direct](docs/ANDROID9_WIFI_DIRECT.md). Android 10+ verifies its negotiated group frequency.
 
 - Wired USB and wireless CarPlay with local authentication.
 - BYD HUD navigation with arrows, distance and street names on verified firmware.
@@ -94,28 +118,38 @@ Install on the **car**, not the iPhone. No jailbreak, dongle, Mac, account or au
 
 This is **not an Apple-certified product**. The APK bundles an experimental accessory identity recovered from public Carlinkit firmware, not a newly provisioned MFi identity for DiPlay. A bundled private key is extractable. Acceptance after future iOS updates, reliability across head units and suitability of that identity for general distribution are unresolved. This release invites community testing; it is not a guarantee of universal compatibility.
 
-Earlier releases were tested on the development DiLink5.1 car: live windshield guidance and street names work, Car hotspot now starts CarPlay, and Wi-Fi Direct performance is substantially improved. Occasional audio cutouts remain and are deferred to a later update. The newly packaged 0.2.7 APK has not had a separate on-car test. Broader head-unit and iOS compatibility is not guaranteed. The HUD firmware scope and cleanup limits are documented in [BYD navigation](docs/BYD_NAVIGATION.md).
+Earlier releases were tested on the development DiLink5.1 car: live windshield guidance and street names work, Car hotspot now starts CarPlay, and Wi-Fi Direct performance is substantially improved. Audio underrun recovery is improved in 0.2.15; remaining cutouts need current diagnostic reports. The 0.2.16 software Opus microphone fallback was accepted on a BOS Mini A1 head unit (Android 9) with an iPhone 12 on iOS 27. The floating-map test build was installed on the development DiLink 5.1 car; feedback led to the pinch corrections in 0.2.9. Earlier wheel-speed and video contributions were tested on a BYD Tang with DiLink 5.0 and an iPhone 15 Pro on iOS 27; wheel-speed dead reckoning in tunnels remains unverified. Broader head-unit and iOS compatibility is not guaranteed. The HUD firmware scope and cleanup limits are documented in [BYD navigation](docs/BYD_NAVIGATION.md).
 
-## What’s new in 0.2.7
+## What’s new in 0.2.16
 
-- App interface in English, Simplified Chinese, Arabic, Russian and Spanish; synchronized Android app-language settings.
-- Steering-wheel media controls and long-press Siri on supported BYD firmware while CarPlay is on screen.
-- Dashboard display choices: map, turn card, or both; corrected dashboard keyframe recovery.
-- Optional ADB feature on supported DiLink 5.0: pause the dashboard map stream when its display mode hides the map.
-- Optional ADB battery reporting for Apple Maps, with warning threshold, charging-connector selection and a checked reconnect action.
-- Audio playback reliability fixes and clearer dashboard settings.
+- Siri and wireless calls send the microphone on Android 7.1–9 head units without an Opus encoder, using a bundled software Opus encoder.
+- Wired USB fixes for NCM framing and Android 8 reads, with smaller-read retries when a head unit rejects a large read.
+- Wireless recovery: hotspot address refresh after a first-connection timeout, Android 17 local-network permission, VPN-authorization crash handling and WPA3 car-hotspot security.
+- Experimental Low-latency decoding and Direct video output, an FPS counter in Diagnostics, and bounded video backlog recovery.
+- Inline Settings search, a confirmation before the quick menu discards unapplied changes, and an Off option for the CarPlay swipe-down gesture.
+- 1% dashboard marker sliders, separate small-window turn-card placement, a resizable side panel and a themed cluster waiting screen.
+- Experimental, off-by-default vehicle options: car Bluetooth pause during CarPlay, music-following ambient lighting, navigation wheel volume and a Platform 21 instrument route.
+
+See [0.2.16 release notes](docs/RELEASE-NOTES-0.2.16.md) and [validation](docs/VALIDATION.md) for contribution links and remaining physical tests. General stutter, calls/Siri, decoder and model-specific reports still need current-device evidence. [0.2.15 notes](docs/RELEASE-NOTES-0.2.15.md) remain available as historical guidance.
+
+If a problem remains, reproduce it on **0.2.16**, then use **Settings → Diagnostics → Save diagnostic report**. Android 10+ normally saves to **Downloads/DiPlay**; Android 7.1–9 uses the document picker. If unavailable, use **View report** or **Share** from the confirmation, which identifies external/private fallback storage. Review the `.txt` and add it to a matching [existing issue](https://github.com/shihabal3amri/DiPlay/issues), or [create one](https://github.com/shihabal3amri/DiPlay/issues/new/choose). Include vehicle/head-unit model, exact firmware and Android/DiLink, phone/iOS, connection backend, relevant settings, steps and failure time. Reports are shared only when you choose; never post your hotspot password.
 
 ## Documentation
 
+[Existing Wi-Fi / Same LAN](docs/EXISTING_WIFI.md) keeps the iPhone and head unit
+on an external router. See the guide for setup, build requirements and the
+BYD DiLink 4.0 / Android 10 clean-install validation result.
+
 - [Install and connect](docs/INSTALL.md)
 - [Compatibility and troubleshooting](docs/COMPATIBILITY.md)
+- [Smooth wireless CarPlay](docs/SMOOTH_WIRELESS.md)
 - [Privacy and diagnostic reports](docs/PRIVACY.md)
-- [Build from source](docs/BUILD.md)
+- [Build from source](docs/BUILD.md) — select `mobile` for the main DiPlay app; `maphost` is a map sample.
 - [Validation](docs/VALIDATION.md)
 - [Release notes](CHANGELOG.md)
 - [Credits and licenses](docs/THIRD_PARTY_NOTICES.md)
 
-The website is available in English, Arabic, Russian, Spanish and Simplified Chinese. The app interface supports those same five languages. Choose the app language in Settings; on Android 13+, it stays synchronized with Android’s per-app language setting.
+The app and release website are available in English, Arabic, Russian, Ukrainian, Spanish, Simplified Chinese and Traditional Chinese (Taiwan). Traditional Chinese uses Taiwan wording; the app also recognizes Hong Kong/Macao and explicit Hant selections without claiming separate regional translations. Choose the app language in Settings; on Android 13+, it stays synchronized with Android’s per-app language setting.
 
 ## Source and credits
 

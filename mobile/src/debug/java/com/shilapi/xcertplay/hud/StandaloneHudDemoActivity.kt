@@ -81,6 +81,7 @@ class StandaloneHudDemoActivity : Activity() {
     }
 
     private fun validateTarget() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) error("This test is restricted to the inspected firmware")
         check(packageName == "com.shihab.diplay.hudtest" && Process.myUid() >= 10000)
         check(Build.FINGERPRINT == "BYD-AUTO/IVI/IVI:13/TP1A.220624.014/eng.build20260722.221155:user/release-keys") {
             "This test is restricted to the inspected firmware"
@@ -118,6 +119,7 @@ class StandaloneHudDemoActivity : Activity() {
     }
 
     private fun transmit(packet: String) {
+        if (!GeelyVendorPolicy.bydDiagnostics) return
         sendBroadcast(Intent("byd.hud.NAVIGATION_DEMO").setComponent(target)
             .putExtra("normal", packet).addFlags(Intent.FLAG_RECEIVER_FOREGROUND))
     }
