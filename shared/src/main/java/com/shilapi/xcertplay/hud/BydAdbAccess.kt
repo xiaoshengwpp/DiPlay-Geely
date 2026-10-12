@@ -1,7 +1,6 @@
 package com.shilapi.xcertplay.hud
 
 import android.content.Context
-import com.shilapi.xcertplay.adb.AdbKeys
 import com.shilapi.xcertplay.adb.LocalAdb
 import com.shilapi.xcertplay.transport.VehicleGear
 
@@ -19,19 +18,9 @@ object BydAdbAccess {
         val gear: VehicleGear? = null,
     )
 
-    /** Blocking: run off the main thread. [mayAsk] lets the car show its approval dialog for DiPlay's key. */
-    fun check(context: Context, mayAsk: Boolean): Status {
-        if (!GeelyVendorPolicy.bydAdb) return Status(State.DISABLED_FOR_VEHICLE, dashboardShowsMap = false)
-        LocalAdb(AdbKeys.load(context)).use { adb ->
-            val state = state(adb.connect(mayAsk))
-            if (state != State.READY) return Status(state)
-            return readStatus(context, adb::shell)
-        }
-    }
-
-    /** ADB handshake only; does not read any BYD service or offer feature conclusions. */
-    fun checkState(context: Context, mayAsk: Boolean): State =
-        if (!GeelyVendorPolicy.bydAdb) State.DISABLED_FOR_VEHICLE else LocalAdb(AdbKeys.load(context)).use { state(it.connect(mayAsk)) }
+fun check(context: Context, mayAsk: Boolean): Status =
+        Status(State.DISABLED_FOR_VEHICLE, dashboardShowsMap = false)
+    fun checkState(context: Context, mayAsk: Boolean): State = State.DISABLED_FOR_VEHICLE
 
     internal fun state(access: LocalAdb.Access): State = when (access) {
         LocalAdb.Access.READY -> State.READY
@@ -40,21 +29,6 @@ object BydAdbAccess {
         LocalAdb.Access.UNSUPPORTED -> State.PAIRING_ONLY
     }
 
-    /** Read and publish the same battery data that the settings page reports as ready. */
-    internal fun readStatus(context: Context, shell: (String) -> String?): Status {
-        if (!GeelyVendorPolicy.bydAdb) return Status(State.DISABLED_FOR_VEHICLE, dashboardShowsMap = false)
-        val mode = BydClusterNaviMode.parseRead(shell(BydClusterNaviMode.READ_COMMAND))
-        val battery = BydBatteryStatus.read(context) { BydBattery.read(context, shell) }
-        val speedKmh = BydWheelSpeed.metersPerSecond(shell(BydWheelSpeed.speedCommand(context)))?.times(3.6)
-        val gear = BydWheelSpeed.gear(shell(BydWheelSpeed.gearCommand(context)))
-        return Status(
-            state = State.READY,
-            dashboardMode = mode,
-            dashboardShowsMap = mode?.showsMap != false,
-            batteryPercent = battery?.percent,
-            rangeKm = battery?.rangeKm,
-            speedKmh = speedKmh,
-            gear = gear,
-        )
-    }
+    internal fun readStatus(context: Context, shell: (String) -> String?): Status =
+        Status(State.DISABLED_FOR_VEHICLE, dashboardShowsMap = false)
 }

@@ -1,29 +1,14 @@
 package com.shilapi.xcertplay
 
-import com.shilapi.xcertplay.hud.GeelyVendorPolicy
-
 import android.content.Context
-import com.shilapi.xcertplay.adb.AdbKeys
-import com.shilapi.xcertplay.adb.LocalAdb
-import java.io.File
 
 /** Strict projection target, discovered afresh through the authorized shell. */
 internal object AdbClusterRouter {
-    private const val REPORT = "adb-cluster-route.txt"
     data class Result(val success: Boolean, val report: String)
 
-    /** Known 5/5.1 displays win; the explicit legacy route may own the measured projection task. */
-    fun enabled(context: Context): Boolean {
-        if (!GeelyVendorPolicy.bydCluster) return false
-        if (DiLink51ClusterLayout.supported()) return false
-        val public = ClusterMapPresentation.findDisplay(context)
-        if (AirPlayPersistence.loadLegacyClusterEnabled(context)) {
-            // Only the measured projection may use the independent task; public 5/5.1 wins.
-            return public == null || DiLink4ClusterDisplay.matches(public.name,
-                ClusterMapPresentation.sizeOf(public).x, ClusterMapPresentation.sizeOf(public).y)
-        }
-        return AirPlayPersistence.loadAdbClusterEnabled(context) && public == null
-    }
+    /** The removed vehicle-routing adapter cannot discover or launch a vendor display. */
+    @Suppress("UNUSED_PARAMETER")
+    fun enabled(context: Context): Boolean = false
 
     // Match only the base logical display, not a device's layer-stack number or override record.
     internal fun displayId(dump: String): Int? {
@@ -65,50 +50,13 @@ internal object AdbClusterRouter {
         return matches.singleOrNull()?.takeIf { it > 0 }
     }
 
-    fun launch(context: Context, token: String, holdStockMap: Boolean = true, prepare: (Int) -> Boolean): Result {
-        if (!GeelyVendorPolicy.bydCluster) return Result(false, "Cluster routing disabled for Geely")
-        var success = false
-        val text = buildString {
-            appendLine("ADB direct cluster launch capturedAt=${java.util.Date()}")
-            appendLine("platform21Route=" + AirPlayPersistence.loadLegacyClusterEnabled(context))
-            appendLine("diLink3ModeSwitchSuppressed=" + (AirPlayPersistence.loadAdbClusterEnabled(context) || AirPlayPersistence.loadLegacyClusterEnabled(context)))
-            appendLine("calibrationOnly=${!holdStockMap}")
-            appendLine("stockMapHoldMode=" + com.shilapi.xcertplay.hud.BydOutputSettings.oemClusterHold(context))
-            try {
-                LocalAdb(AdbKeys.load(context)).use { adb ->
-                    val access = adb.connect(mayAsk = false)
-                    appendLine("adbAccess=$access")
-                    if (access != LocalAdb.Access.READY) return@use
-                    val display = displayId(adb.shell("dumpsys display").orEmpty())
-                    appendLine("routeTarget=${display ?: "none"}")
-                    if (display == null || !enabled(context) || !prepare(display)) return@use
-                    val held = AirPlayPersistence.loadLegacyClusterEnabled(context) || !holdStockMap || com.shilapi.xcertplay.hud.BydOemClusterNavi.holdForLaunch(context, token) {
-                        enabled(context) && prepare(display)
-                    }
-                    appendLine("stockMapHoldReady=$held")
-                    if (!held || !enabled(context) || !prepare(display)) return@use
-                    val output = adb.shell(launchCommand(context.packageName, display, token)).orEmpty()
-                    success = accepted(output)
-                    appendLine(output.take(1500))
-                    appendLine("launchAccepted=$success; awaiting actual display confirmation")
-                }
-            } catch (error: Exception) {
-                appendLine("routeError=${error.javaClass.simpleName}: ${error.message}")
-            }
-        }
-        // A failed diagnostic write must not leave launchPending stuck forever.
-        runCatching { File(context.filesDir, REPORT).writeText(text) }
-        return Result(success, text)
-    }
+    @Suppress("UNUSED_PARAMETER")
+    fun launch(context: Context, token: String, holdStockMap: Boolean = true, prepare: (Int) -> Boolean): Result =
+        Result(false, "Cluster routing disabled for Geely")
 
-    fun verify(context: Context, task: Int): Int? = if (!GeelyVendorPolicy.bydCluster) null else runCatching {
-        LocalAdb(AdbKeys.load(context)).use { adb ->
-            if (adb.connect(mayAsk = false) != LocalAdb.Access.READY) null
-            else activityDisplay(adb.shell("dumpsys activity activities").orEmpty(), context.packageName, task)
-        }
-    }.getOrNull()
+    @Suppress("UNUSED_PARAMETER")
+    fun verify(context: Context, task: Int): Int? = null
 
-    fun report(context: Context): String = File(context.filesDir, REPORT).let {
-        if (it.isFile) it.readText() else "ADB cluster routing has not been run."
-    }
+    @Suppress("UNUSED_PARAMETER")
+    fun report(context: Context): String = "ADB cluster routing is unavailable in the Geely build."
 }

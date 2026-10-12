@@ -29,10 +29,18 @@ class GeelyBoundaryContract(unittest.TestCase):
         self.assertIn('field = if (GeelyVendorPolicy.videoWhileParked) value else null',text)
     def test_local_adb_is_disabled_before_network_or_key_storage(self):
         text=(S/'adb/LocalAdb.kt').read_text()
-        for signature,expected in [('fun connect(mayAsk: Boolean): Access {','return Access.UNSUPPORTED'),
-                                   ('fun shell(command: String, readTimeoutMillis: Int): String? {','return null'),
-                                   ('fun openShell(command: String): InteractiveShell? {','return null')]:
-            self.assertTrue(text.split(signature,1)[1].lstrip().startswith('if (!GeelyVendorPolicy.bydAdb) '+expected))
+        for signature in (
+            'fun connect(mayAsk: Boolean): Access = Access.UNSUPPORTED',
+            'fun shell(command: String): String? = null',
+            'fun shell(command: String, readTimeoutMillis: Int): String? = null',
+            'fun openShell(command: String): InteractiveShell? = null',
+        ):
+            self.assertIn(signature, text)
+        for forbidden in ('Socket(', 'InetSocketAddress', 'AdbKeys.load(', 'AdbKeys.sign(',
+                          'AdbKeys.publicKeyMessage(', 'getInputStream(', 'getOutputStream(',
+                          'private val key:', 'private val host:', 'private val port:',
+                          'fun handshake(', 'fun awaitApproval('):
+            self.assertNotIn(forbidden, text)
         keys=(S/'adb/AdbKeys.kt').read_text().split('fun load(context: Context): KeyPair {',1)[1]
         self.assertTrue(keys.lstrip().startswith('check(GeelyVendorPolicy.bydAdb)'))
     def test_actual_audio_renderer_passes_the_saved_legacy_stream(self):
@@ -43,5 +51,5 @@ class GeelyBoundaryContract(unittest.TestCase):
         from geely_version import read_version
         data=read_version()
         self.assertEqual((data['upstreamVersionName'],data['upstreamVersionCode'],data['versionName'],data['versionCode']),
-                         ('0.2.16',35,'0.2.16-geely.1',35001))
+                         ('0.2.18',37,'0.2.18-geely.1',37001))
 if __name__=='__main__':unittest.main()

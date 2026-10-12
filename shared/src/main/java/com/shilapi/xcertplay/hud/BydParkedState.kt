@@ -10,13 +10,8 @@ internal object BydParkedState {
     const val GEAR = "service call autoservice 5 i32 1011 i32 555745336"
     private const val PARK = 1
 
-    private val shell by lazy { BydAdbShell("DiPlay-BYD-Parked") }
-
-    /** Null when the gear cannot be read (no ADB over network, or another car). Blocking. */
-    fun parked(context: Context): Boolean? {
-        if (!GeelyVendorPolicy.videoWhileParked) return null
-        return parked(shell.run(context, BydWheelSpeed.gearCommand(context)))
-    }
+    private val shell by lazy { Unit }
+    fun parked(context: Context): Boolean? = null
 
     fun parked(output: String?): Boolean? = BydParcel.value(output)?.takeIf { it in 1..6 }?.let { it == PARK }
 }

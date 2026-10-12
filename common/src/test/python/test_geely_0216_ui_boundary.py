@@ -68,6 +68,14 @@ class Geely0216UiBoundaryTest(unittest.TestCase):
         manifest = (ROOT / 'common/src/main/AndroidManifest.xml').read_text()
         self.assertNotIn('android.permission.REQUEST_INSTALL_PACKAGES', manifest)
 
+    def test_disabled_vendor_and_cached_update_controls_are_not_advertised(self):
+        ui = self.source('DiPlayActivity.kt')
+        self.assertIn('if (GeelyVendorPolicy.bydAdb && Build.VERSION.SDK_INT == 32)', ui)
+        self.assertIn('availableUpdate = if (GeelyVendorPolicy.upstreamApkUpdates)', ui)
+        self.assertIn('availableUpdate?.takeIf { GeelyVendorPolicy.upstreamApkUpdates }', ui)
+        direct = ui.split('private fun openAvailableUpdate(release: UpdateRelease) {', 1)[1]
+        self.assertTrue(direct.lstrip().startswith('if (!GeelyVendorPolicy.upstreamApkUpdates) return'))
+
     def test_new_automatic_mutators_have_guards_before_context_and_shell(self):
         entries = [
             ('WheelKeyService.kt', 'fun restoreIfNeeded(context: Context) {', 'bydAdb'),

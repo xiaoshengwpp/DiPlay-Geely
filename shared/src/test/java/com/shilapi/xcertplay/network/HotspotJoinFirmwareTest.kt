@@ -4,6 +4,10 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class HotspotJoinFirmwareTest {
+    @Test fun currentFirmwareDiscoveryIsDisabledWithoutReadingAndroidOrModuleFiles() {
+        repeat(3) { assertNull(HotspotJoinFirmware.current()) }
+    }
+
     @Test fun vendorAndWifiModuleChangesInvalidateOldParcelsEvenWithTheSameAndroidBuild() {
         val properties = mapOf("framework" to "build-a", "vendor" to "vendor-a", "api" to "33")
         val modules = mapOf("framework-wifi.jar" to "synthetic-module-a")

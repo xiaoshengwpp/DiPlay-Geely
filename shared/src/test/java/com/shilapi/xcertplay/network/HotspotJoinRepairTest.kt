@@ -14,10 +14,8 @@ class HotspotJoinRepairTest {
         }
         val command = HotspotJoinRepair.command("/data/app/with'quote/base.apk", "com.shihab.diplay",
             "apply", token, token)
-        assertTrue(command.contains("app_process"))
-        assertTrue(command.contains("'\"'\"'"))
+        assertEquals("", command)
         assertFalse(command.contains("setSoftApConfiguration"))
-        try { HotspotJoinRepair.command("a", "bad;id", "apply", token, token); fail() }
-        catch (_: IllegalArgumentException) { }
+        assertEquals("", HotspotJoinRepair.command("a", "bad;id", "apply", token, token))
     }
 }

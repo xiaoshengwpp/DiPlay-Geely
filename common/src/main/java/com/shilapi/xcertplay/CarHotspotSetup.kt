@@ -5,8 +5,6 @@ import com.shilapi.xcertplay.hud.GeelyVendorPolicy
 import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.provider.Settings
-import android.util.Log
-import com.shilapi.xcertplay.adb.AdbKeys
 import com.shilapi.xcertplay.adb.LocalAdb
 import com.shilapi.xcertplay.hud.BydOutputSettings
 import com.shilapi.xcertplay.network.CarHotspotSettings
@@ -28,28 +26,11 @@ internal object CarHotspotSetup {
         }
     }
 
-    fun check(context: Context, adb: LocalAdb? = null): LocalAdb.Access =
-        if (!GeelyVendorPolicy.bydAdb) LocalAdb.Access.UNREACHABLE else (adb ?: LocalAdb(AdbKeys.load(context))).use {
-        it.connect(mayAsk = false)
-    }
+    @Suppress("UNUSED_PARAMETER")
+    fun check(context: Context, adb: LocalAdb? = null): LocalAdb.Access = LocalAdb.Access.UNSUPPORTED
 
-    fun grant(context: Context, permissions: List<Permission>, adb: LocalAdb? = null): LocalAdb.Access =
-        if (!GeelyVendorPolicy.bydAdb) LocalAdb.Access.UNREACHABLE else (adb ?: LocalAdb(AdbKeys.load(context))).use {
-            val access = it.connect(mayAsk = true)
-            Log.i("DiPlay-ADB", "switch connection: $access")
-            if (access == LocalAdb.Access.READY) {
-                for (permission in permissions) {
-                    if (!permission.granted(context)) {
-                        Log.i("DiPlay-ADB", "request permission: ${permission.appOp}")
-                        it.shell("appops set ${context.packageName} ${permission.appOp} allow")
-                    }
-                    val granted = permission.granted(context)
-                    Log.i("DiPlay-ADB", "permission ${permission.appOp}: granted=$granted")
-                    if (!granted) break
-                }
-            }
-            access
-        }
+    @Suppress("UNUSED_PARAMETER")
+    fun grant(context: Context, permissions: List<Permission>, adb: LocalAdb? = null): LocalAdb.Access = LocalAdb.Access.UNSUPPORTED
 
     fun shouldStartOnLaunch(context: Context, hasSession: Boolean): Boolean =
         GeelyVendorPolicy.bydAdb && !hasSession && CarHotspotSettings.shouldEnable(context,

@@ -1,12 +1,12 @@
-# DiPlay 吉利星越 L 适配版 0.2.16
+# DiPlay 吉利星越 L 适配版 0.2.18
 
 本分支目标仅为星越 L 2025 款（揽星）。“银河车机”描述该车辆的系统背景，不代表支持银河品牌其他车型。
 
 吉利问题请到[本仓库 Issues](https://github.com/xiaoshengwpp/DiPlay-Geely/issues/new/choose)，并先阅读[日志导出与隐私指南](README.md#问题反馈与兼容性共建)。未来可安装版本统一从[本仓库普通 GitHub Releases](https://github.com/xiaoshengwpp/DiPlay-Geely/releases)提供；源码 CI 产物不可当作安装包。
 
-以官方完整 `v0.2.16` 源码（`bac419695ca26b7e67d204a279333ca52132c2cb`）为基线，并保留吉利安全边界：禁用比亚迪/DiLink 车辆写入、仪表地图共享、驻车视频、自动 ADB/权限修改和官方原版 APK 安装；新安装默认简体中文，保留已保存语言及音频路由。尚未完成星越 L 实车验证。
+以已验证吉利 0.2.16 基线整合官方完整 `v0.2.18` 差异（`e8d23603ccf5aa9c32ad5c999656c5fb492c83e6`），并保留吉利安全边界：禁用比亚迪/DiLink 车辆写入、仪表地图共享、驻车视频、自动 ADB/权限修改和官方原版 APK 安装；新安装默认简体中文，保留已保存语言及音频路由。尚未完成星越 L 实车验证。
 
-见[集成与验证记录](docs/GEELY-0.2.16-REVIEW.md)及[构建指南](docs/BUILD.md)。无认证、未签名的源码验证 APK 不是可交付的完整版 CarPlay 安装包。下方保留的上游说明用于参考，其中比亚迪专属功能在本吉利版本中禁用。
+见[集成与验证记录](docs/GEELY-0.2.18-REVIEW.md)及[构建指南](docs/BUILD.md)。无认证、未签名的源码验证 APK 不是可交付的完整版 CarPlay 安装包。下方保留的上游说明用于参考，其中比亚迪专属功能在本吉利版本中禁用。
 
 ---
 
@@ -16,9 +16,9 @@
 
 > 这些项目专注于比亚迪汽车。它们可能在其他品牌上运行，但其他品牌不在支持范围内，也没有增加支持或修复其品牌特定兼容性问题的计划。
 
-[下载与中文网站](https://shihabal3amri.github.io/DiPlay/zh-Hans/) · [0.2.16 版本](https://github.com/shihabal3amri/DiPlay/releases/tag/v0.2.16) · [完整说明](README.md) · [报告问题](https://github.com/shihabal3amri/DiPlay/issues/new/choose)
+[下载与中文网站](https://shihabal3amri.github.io/DiPlay/zh-Hans/) · [0.2.18 版本](https://github.com/shihabal3amri/DiPlay/releases/tag/v0.2.18) · [完整说明](README.md) · [报告问题](https://github.com/shihabal3amri/DiPlay/issues/new/choose)
 
-## 0.2.16 — 公开预览版
+## 0.2.18 — 公开预览版
 
 请安装在允许 APK 安装的 Android 7.1+（API 25+）车机上；Android 7.1–8.1 尚未经实车验证。无需越狱、转接盒、账户或认证服务器。有线及无线核心连接不要求 ADB；可选车辆数据及车辆控制需要支持的固件和已授权网络 ADB。
 
@@ -26,25 +26,25 @@ Wi-Fi Direct 现支持 Android 7.1–9 的旧版建组路径，使用系统返�
 
 ### 新增与修正
 
-- **Siri 与通话**：在没有 Opus 编码器的 Android 7.1–9 车机上，改用内置软件 Opus 编码器发送麦克风声音；已在 BOS Mini A1 车机（Android 9）配合 iOS 27 的 iPhone 12 上验证。
-- **有线连接**：修复 USB NCM 分帧和 Android 8 读取问题；车机拒绝较大的 USB 读取时，会改用较小的读取重试。
-- **无线连接**：首次连接超时后刷新热点地址，支持 Android 17 本地网络权限，VPN 授权界面缺失时不再崩溃，车机热点新增 WPA3 安全选项。
-- **视频**：新增实验性“低延迟解码”和“直接视频输出”（默认关闭），“诊断”中新增 FPS 计数器；视频积压恢复改为有界策略，仍需更多实车反馈。
-- **设置**：设置页内嵌搜索框；快捷菜单放弃未应用的更改前会先确认；CarPlay 下滑手势可设为关闭。
-- **仪表与车辆**：车辆标记位置支持 1% 滑块，小窗口转向卡片可单独设置位置，侧边面板可调整大小，仪表等待画面跟随应用主题。暂停车机蓝牙、音乐氛围灯、导航方向盘音量和 Platform 21 仪表路线均为实验性功能，默认关闭。
+- **有线连接**：USB 读取恰好在 DiPlay 停止等待时完成，不再导致每隔几分钟断开；Android 7.1 车机、USB 音频驱动占用 iPhone 的车机，以及没有 VPN 授权对话框但已授权网络 ADB 的车机，现在都能启动有线 CarPlay。
+- **音乐与提示**：短暂的音乐断音减少；连接界面在所有应用语言下都显示实际的连接阶段和失败原因。
+- **蓝牙**：如果车机的安卓蓝牙无法连到 iPhone，无线 CarPlay 会直接给出明确提示并建议改用 USB，不再反复重试。
+- **方向盘**：在 CarPlay 画面中，上一首／下一首无需方向盘按键服务即可切歌（例如没有 ADB 的 DiLink 2.0）；吉利／领克 `geely_fx11` 车机支持方向盘媒体键和 Siri；停在“已允许，正在启动…”的方向盘按键会自动恢复。
+- **设置备份与更新**：在“**设置 → 关于**”中通过二维码用手机备份或恢复设置；安装更新时可选择 MT 管理器等其他安装程序。
+- **实验性选项**（默认关闭）：Harman 全屏、直角无安全区、通过 USB 更清晰的导航语音、联发科低延迟解码、关闭媒体按键音频焦点、通话使用车机电话音频、仪表车速表和 FCE 仪表导航。
 
-[0.2.16 完整说明](docs/RELEASE-NOTES-0.2.16.md)包含贡献链接及功能限制；构建和验证信息见[验证记录](docs/VALIDATION.md)。Android 7.1–8.1 尚需实车验证，不宣称所有车型的连接、音频或 Siri 问题均已解决。可选功能请停车后测试。
+[0.2.18 完整说明](docs/RELEASE-NOTES-0.2.18.md)包含贡献链接及功能限制；构建和验证信息见[验证记录](docs/VALIDATION.md)。Android 7.1–8.1 尚需实车验证，不宣称所有车型的连接、音频或 Siri 问题均已解决。可选功能请停车后测试。
 
-### 请提供 0.2.16 的新诊断报告
+### 请提供 0.2.18 的新诊断报告
 
-1. 更新到 **0.2.16**，复现问题并记录发生时间。开机／自动启动问题发生后，可手动打开 DiPlay 导出。
-2. 打开“**设置 → 诊断 → 保存诊断报告**”。Android 10+ 通常保存到 **Downloads/DiPlay**；Android 7.1–9 使用文件选择器，也可点“选择保存位置”。如选择器或公共存储不可用，应用会使用专用外部或私有目录，并在确认中说明目的地。
+1. 更新到 **0.2.18**，复现问题并记录发生时间。开机／自动启动问题发生后，可手动打开 DiPlay 导出。
+2. 打开“**设置 → 诊断 → 保存诊断报告**”。Android 10+ 通常保存到 **Downloads/DiPlay**；Android 7.1–9 会请求存储权限并同样保存到该位置，也可点“选择保存位置”。如选择器或公共存储不可用，应用会使用专用外部或私有目录，并在确认中说明目的地。
 3. 使用确认中的**查看报告／分享**；没有分享应用时，可在报告视图中选择并复制文本。检查 `.txt` 并删除隐私信息，再附到匹配的[现有问题](https://github.com/shihabal3amri/DiPlay/issues)，或[新建问题](https://github.com/shihabal3amri/DiPlay/issues/new/choose)。报告不会自动上传，请勿公开热点密码或私有认证文件。
 4. 注明车型／车机、DiLink/Android/完整固件版本、iPhone/iOS、USB／车机热点／Wi-Fi Direct／同一局域网、相关设置、复现步骤、预期与实际结果及故障时间。
 
 [从源码构建](docs/BUILD.md)：主应用请选择 `mobile` 模块。`maphost` 是地图演示应用，构建步骤和 APK 路径见说明。
 
-历史记录：[0.2.15](docs/RELEASE-NOTES-0.2.15.md)、[0.2.14](docs/RELEASE-NOTES-0.2.14.md)、[0.2.13](docs/RELEASE-NOTES-0.2.13.md)、[0.2.12](docs/RELEASE-NOTES-0.2.12.md)、[0.2.11](docs/RELEASE-NOTES-0.2.11.md)、[安装与连接](docs/INSTALL.md)。
+历史记录：[0.2.17](docs/RELEASE-NOTES-0.2.17.md)、[0.2.16](docs/RELEASE-NOTES-0.2.16.md)、[0.2.15](docs/RELEASE-NOTES-0.2.15.md)、[0.2.14](docs/RELEASE-NOTES-0.2.14.md)、[0.2.13](docs/RELEASE-NOTES-0.2.13.md)、[0.2.12](docs/RELEASE-NOTES-0.2.12.md)、[0.2.11](docs/RELEASE-NOTES-0.2.11.md)、[安装与连接](docs/INSTALL.md)。
 
 这是公开预览版，**未经 Apple 认证**。APK 使用从公开 Carlinkit 固件中提取的既有实验性配件身份，并非为 DiPlay 新签发的 MFi 身份；其中的私钥可被提取，未来 iOS 是否继续接受及其公开分发适用性尚未确定。Android 签名密钥和配件身份不进入 Git 或源代码压缩包；普通源代码/CI 构建默认不配置身份。部分车机仍可能卡顿或无法应用图标大小设置。
 

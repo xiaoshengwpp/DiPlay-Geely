@@ -11,6 +11,17 @@ import java.nio.file.Files
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33], manifest = Config.NONE)
 class HotspotJoinPlatformTest {
+    @Test fun productionPortCannotReadOrWriteInjectedServicesOrDiscoverPlatformServices() {
+        val port = HotspotJoinPlatform(Any(), 0, "synthetic-firmware") {
+            error("Live entry points must not query capabilities")
+        }
+        assertEquals("synthetic-firmware", port.firmware())
+        assertNull(port.hotspotOff())
+        assertFalse(port.write(Any()))
+        assertThrows(UnsupportedOperationException::class.java) { port.read() }
+        assertThrows(UnsupportedOperationException::class.java) { HotspotJoinPlatform.connect() }
+    }
+
     class WifiService(var config: SoftApConfiguration) {
         var stationFiveGhz = true
         fun getSoftApConfiguration() = config
@@ -33,7 +44,7 @@ class HotspotJoinPlatformTest {
             ByteArray::class.java).newInstance(221, 0, byteArrayOf(0, 0x50, 0xf2.toByte(), 2, 1, 1))
         builder.javaClass.getMethod("setVendorElements", List::class.java).invoke(builder, listOf(other))
         val config = builder.build()
-        val port = HotspotJoinPlatform(WifiService(config), 33, "synthetic-firmware") {
+        val port = OfflineHotspotJoinPlatform(WifiService(config), 33, "synthetic-firmware") {
             HotspotJoinCapability.Snapshot(true, setOf(36, 44))
         }
         val next = port.repaired(config)!!
@@ -60,20 +71,20 @@ class HotspotJoinPlatformTest {
         for (capability in listOf(null, HotspotJoinCapability.Snapshot(false, setOf(36)),
             HotspotJoinCapability.Snapshot(true, emptySet()))) {
             // Station 5 GHz support on this fake is true; the AP capability must still refuse.
-            val port = HotspotJoinPlatform(WifiService(current), 33, "synthetic-firmware") { capability }
+            val port = OfflineHotspotJoinPlatform(WifiService(current), 33, "synthetic-firmware") { capability }
             assertNull(port.repaired(current))
         }
         val explicit = config(44)
-        assertNull(HotspotJoinPlatform(WifiService(explicit), 33, "synthetic-firmware") {
+        assertNull(OfflineHotspotJoinPlatform(WifiService(explicit), 33, "synthetic-firmware") {
             HotspotJoinCapability.Snapshot(true, setOf(36))
         }.repaired(explicit))
-        assertNotNull(HotspotJoinPlatform(WifiService(explicit), 33, "synthetic-firmware") {
+        assertNotNull(OfflineHotspotJoinPlatform(WifiService(explicit), 33, "synthetic-firmware") {
             HotspotJoinCapability.Snapshot(true, setOf(36, 44))
         }.repaired(explicit))
-        assertNotNull(HotspotJoinPlatform(WifiService(current), 33, "synthetic-firmware") {
+        assertNotNull(OfflineHotspotJoinPlatform(WifiService(current), 33, "synthetic-firmware") {
             HotspotJoinCapability.Snapshot(true, setOf(36))
         }.repaired(current))
-        assertNotNull(HotspotJoinPlatform(WifiService(current).apply { stationFiveGhz = false },
+        assertNotNull(OfflineHotspotJoinPlatform(WifiService(current).apply { stationFiveGhz = false },
             33, "synthetic-firmware") { HotspotJoinCapability.Snapshot(true, setOf(36)) }.repaired(current))
     }
     @Test fun lockRefusesOverlappingOperationsAndReleasesAfterFailure() {

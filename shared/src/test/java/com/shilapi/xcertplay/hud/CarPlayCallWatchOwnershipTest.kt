@@ -11,10 +11,30 @@ import org.junit.Test
 import org.junit.rules.TemporaryFolder
 
 class CarPlayCallWatchOwnershipTest {
+    @Test fun productionOwnershipFacadeCannotTouchFilesOrInvokeCallbacks() {
+        val live = CarPlayCallWatchOwnership(temporary.root)
+        val path = java.io.File(temporary.root, "must-not-exist").path
+        repeat(3) {
+            live.claim(path) { error("claim callback invoked") }
+            assertFalse(live.update(path) { error("update callback invoked") })
+            assertFalse(live.retire(path) { error("retire callback invoked") })
+            assertFalse(live.retireOrRetry(path) { error("retry callback invoked") })
+            assertFalse(live.prepare(path, "1") { error("process inspected") })
+            assertFalse(live.markWatcherReady(path, "1", "2"))
+            assertFalse(live.watcherReady(path, "1") { error("process inspected") })
+            assertFalse(live.claimReady(path, "1", { error("process inspected") }, { error("write callback") }))
+            assertFalse(live.cancelPrepared(path))
+            assertFalse(live.retireStaged(path) { error("cleanup callback") })
+            live.clearWatcherReady(path, "2")
+        }
+        assertEquals("", CarPlayCallWatchOwnership.newToken("anything"))
+        assertTrue(temporary.root.listFiles().orEmpty().isEmpty())
+    }
+
     @get:Rule val temporary = TemporaryFolder()
-    private val ownership get() = CarPlayCallWatchOwnership(temporary.root)
+    private val ownership get() = FakeCarPlayCallWatchOwnership(temporary.root)
     private fun token(packageName: String = "com.example.diplay") = File(temporary.root,
-        File(CarPlayCallWatchOwnership.newToken(packageName)).name).path
+        File(FakeCarPlayCallWatchOwnership.newToken(packageName)).name).path
 
     @Test fun immediateNextCallCannotReuseThePreviousWatchersToken() {
         assertNotEquals(token(), token())

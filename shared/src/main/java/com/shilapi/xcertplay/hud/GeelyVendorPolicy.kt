@@ -8,6 +8,12 @@ package com.shilapi.xcertplay.hud
  */
 object GeelyVendorPolicy {
     const val PROFILE = "geely-experimental"
+    // Upstream 0.2.18 vendor entry points remain unverified for this product.
+    val geelyInput: Boolean = false
+    val geelyMicrophoneOverride: Boolean = false
+    val phoneAudioRoute: Boolean = false
+    val fceCluster: Boolean = false
+    val foregroundMediaKeys: Boolean = false
     val bydNavigation: Boolean = false
     val bydCluster: Boolean = false
     val bydClusterSong: Boolean = false

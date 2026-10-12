@@ -6,6 +6,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Switch
 import com.shilapi.xcertplay.host.R
+import com.shilapi.xcertplay.media.AmbientColorSource
 import com.shilapi.xcertplay.media.AmbientMusicSettings
 import java.util.concurrent.CompletableFuture
 import org.junit.Assert.*

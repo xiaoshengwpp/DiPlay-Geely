@@ -33,7 +33,7 @@ class HotspotJoinNormalizedTransactionTest {
     private class Fixture(directory: File, userConfigured: Boolean) {
         val original = config(userConfigured)
         val service = NormalizingWifiService(original)
-        val port = HotspotJoinPlatform(service, 33, "synthetic-firmware") {
+        val port = OfflineHotspotJoinPlatform(service, 33, "synthetic-firmware") {
             HotspotJoinCapability.Snapshot(true, setOf(36, 44))
         }
         val journal = HotspotJoinJournal(directory, port.firmware(), port.codec)

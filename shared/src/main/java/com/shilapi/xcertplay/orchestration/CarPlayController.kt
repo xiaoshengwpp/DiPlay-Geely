@@ -62,6 +62,7 @@ import com.shilapi.xcertplay.network.WirelessStartupException
 import com.shilapi.xcertplay.network.WirelessStartupFailure
 import com.shilapi.xcertplay.network.WirelessStartupDiagnostics
 import com.shilapi.xcertplay.transport.BlockingDuplexByteStream
+import com.shilapi.xcertplay.transport.BluetoothLinkCheck
 import com.shilapi.xcertplay.transport.BluetoothRfcommDuplexStream
 import com.shilapi.xcertplay.transport.Ch341DeviceMatcher
 import com.shilapi.xcertplay.transport.Ch341I2cTransport
@@ -235,6 +236,17 @@ class CarPlayController(
     private val dashboardMapEpoch = AtomicInteger()
     private val playbackStatus = com.shilapi.xcertplay.media.CarPlayPlaybackStatus()
 
+    private val albumReplayLock = Any()
+    private var initialArtworkReplay: com.shilapi.xcertplay.transport.Iap2ArtworkTransfer? = null
+
+    fun nowPlayingSnapshot(): com.shilapi.xcertplay.media.CarPlayNowPlaying =
+        synchronized(playbackStatus) { playbackStatus.nowPlaying }
+
+    /** One bounded payload, never a nearest-cover guess when a reference is absent. */
+    fun matchingArtworkSnapshot(id: Int?): com.shilapi.xcertplay.transport.Iap2ArtworkTransfer? =
+        synchronized(albumReplayLock) { initialArtworkReplay?.takeIf { id != null && it.id == id } }
+
+
     /** Told when the iPhone starts or stops playing media; may run on any thread. */
     @Volatile var playbackListener: ((Boolean) -> Unit)? = null
 
@@ -260,6 +272,7 @@ class CarPlayController(
     @Volatile private var bonjour: CarPlayBonjour? = null
     private val wirelessResourceLock = Any()
     private val wirelessFailureReported = AtomicBoolean(false)
+    @Volatile private var instantBluetoothLink: InstantBluetoothLink? = null
     @Volatile private var firstTcpWatchdog: FirstTcpWatchdog? = null
     @Volatile private var wirelessPublishedAddress: InetAddress? = null
     @Volatile private var wirelessAlternateAddress: InetAddress? = null
@@ -334,6 +347,7 @@ class CarPlayController(
         override fun onSessionEnded(session: AirPlaySession) {
             if (activeSession === session) {
                 activeSession = null
+                synchronized(albumReplayLock) { initialArtworkReplay = null }
                 BydNavigationOutputs.endNow(preserveTurnOverlay = !closed && config.transport == CarPlayTransport.WIRELESS)
                 BydBluetoothSuspend.resume(appContext, this@CarPlayController)
                 com.shilapi.xcertplay.glance.CarPlayGlance.setConnected(false)
@@ -779,7 +793,47 @@ class CarPlayController(
         }
     }
 
+    enum class InitialAlbumRefreshResult { SENT, FAILED, CLOSED, INACTIVE_SESSION, CANCELLED, CHANNEL_UNAVAILABLE }
+
+    /** Existing metadata channel and worker; the caller owns the single-send budget. */
+    fun refreshInitialNowPlaying(
+        stillNeeded: () -> Boolean,
+        beforeSend: () -> Boolean = { true },
+        onFinished: (InitialAlbumRefreshResult) -> Unit = {},
+    ) {
+        var result = InitialAlbumRefreshResult.CANCELLED
+        run {
+            try {
+                if (closed) { result = InitialAlbumRefreshResult.CLOSED; return@run }
+                if (activeSession == null) { result = InitialAlbumRefreshResult.INACTIVE_SESSION; return@run }
+                if (!stillNeeded()) return@run
+                // The RFCOMM bootstrap is not the runtime metadata channel after wireless handoff.
+                val channel = if (config.transport == CarPlayTransport.WIRELESS) wirelessTunnelChannel else csm
+                if (channel == null) {
+                    result = InitialAlbumRefreshResult.CHANNEL_UNAVAILABLE
+                    debugLog("album recovery skipped channel=unavailable")
+                    return@run
+                }
+                if (closed) { result = InitialAlbumRefreshResult.CLOSED; return@run }
+                if (!stillNeeded() || !beforeSend()) return@run
+                // Claim only at the send boundary; preflight skips leave the budget intact.
+                result = InitialAlbumRefreshResult.FAILED
+                channel.send(com.shilapi.xcertplay.iap2.message.Iap2ControlMessages.startNowPlayingUpdates(), 250)
+                result = InitialAlbumRefreshResult.SENT
+                debugLog("album recovery subscription sent")
+            } catch (error: Exception) {
+                debugLog("album recovery subscription failed type=${error.javaClass.simpleName}")
+            } finally {
+                onFinished(result)
+            }
+        }
+    }
+
     private fun onArtworkTransfer(transfer: com.shilapi.xcertplay.transport.Iap2ArtworkTransfer) {
+        if (closed) return
+        synchronized(albumReplayLock) {
+            initialArtworkReplay = transfer.takeIf { it.bytes.size <= 1024 * 1024 }
+        }
         debugLog("iap2 artwork transfer id=0x${transfer.id.toString(16)} bytes=${transfer.bytes.size}")
         artworkListener?.invoke(transfer.id, transfer.bytes)
     }
@@ -1298,8 +1352,10 @@ class CarPlayController(
                     CarPlayVpnService.AttachResult.Started -> Unit
                     CarPlayVpnService.AttachResult.AlreadyStarted ->
                         throw IOException("Wireless AirPlay transport is already attached")
-                    is CarPlayVpnService.AttachResult.Failed ->
+                    is CarPlayVpnService.AttachResult.Failed -> {
+                        debugLog("wireless AirPlay listener attach failed detail=${service.lastAttachFailure}")
                         throw IOException(result.message)
+                    }
                 }
             }
             val listenerPort = service.boundPort() ?: wirelessAirPlayConfig.port
@@ -1350,9 +1406,11 @@ class CarPlayController(
             }
             logBluetoothConnectionSnapshot(device, "before-connect")
             val bluetoothStarted = System.nanoTime()
+            val bluetoothConnectMillis: Long
             try {
                 connectBluetoothSocket(socket, device.address)
-                connectionDiagnostic("Bluetooth connect completed elapsedMs=${elapsedMillis(bluetoothStarted)} " +
+                bluetoothConnectMillis = elapsedMillis(bluetoothStarted)
+                connectionDiagnostic("Bluetooth connect completed elapsedMs=$bluetoothConnectMillis " +
                     "socketReportedConnected=${runCatching { socket.isConnected }.getOrNull() ?: "unknown"}")
             } catch (error: Throwable) {
                 connectionDiagnostic(
@@ -1375,6 +1433,12 @@ class CarPlayController(
                     // The stream owns the connected socket and also closes it if stream getters
                     // fail. Do not retain a second socket owner in bootstrap teardown.
                     if (bluetoothSocket === socket) bluetoothSocket = null
+                }
+            }
+            if (BluetoothLinkCheck.looksUnreal(bluetoothConnectMillis, 0L)) {
+                InstantBluetoothLink(generation, device, stream, bluetoothConnectMillis).also {
+                    instantBluetoothLink = it
+                    watchForUnrealBluetooth(it)
                 }
             }
             val channel = Iap2Session.openWireless(
@@ -1492,7 +1556,11 @@ class CarPlayController(
             } else {
                 debugLog("wireless bring-up failed", error)
                 if (error is Error) throw error
-                fail(error, generation)
+                // A link that "connected" at once and failed without a byte may never have been
+                // real: say so instead of retrying into the same failure.
+                val unreal = instantBluetoothLink?.takeIf { it.generation == generation }
+                    ?.let { unrealBluetoothFailure(it, "failure") }
+                fail(unreal ?: error, generation)
                 closeWirelessStack(generation = generation)
             }
         }
@@ -2274,6 +2342,65 @@ class CarPlayController(
         )
     }
 
+    /** An RFCOMM link that came up too fast to have reached a phone, kept for [unrealBluetoothFailure]. */
+    private class InstantBluetoothLink(
+        val generation: Int,
+        val device: BluetoothDevice,
+        val stream: BluetoothRfcommDuplexStream,
+        val connectMillis: Long,
+    )
+
+    /**
+     * Some head units answer every RFCOMM connect with success at once and then carry no byte:
+     * calls and music run on the maker's own Bluetooth module, and Android's adapter fronts
+     * nothing a phone can hear. Some of them leave the link open and silent, others drop it after
+     * a few seconds, so the link is put to the test both when it has stayed silent for a while and
+     * when the attempt fails without a byte received (see the bring-up failure handler).
+     */
+    private fun watchForUnrealBluetooth(link: InstantBluetoothLink) {
+        Thread({
+            try {
+                Thread.sleep(BluetoothLinkCheck.SILENCE_MILLIS)
+            } catch (_: InterruptedException) {
+                return@Thread
+            }
+            if (isStaleWirelessRun(link.generation)) return@Thread
+            val failure = unrealBluetoothFailure(link, "silence") ?: return@Thread
+            if (isStaleWirelessRun(link.generation)) return@Thread
+            fail(failure, link.generation)
+            closeWirelessStack(generation = link.generation)
+        }, "diplay-bluetooth-link-check").apply { isDaemon = true; start() }
+    }
+
+    /**
+     * The failure to report when [link] was never real, or null when it was or cannot be told.
+     * The claim is put to a service no phone offers, which a real stack cannot connect to; only
+     * when that "succeeds" at once as well is the link called unreal. A link that has delivered
+     * a single byte is not tested at all.
+     */
+    private fun unrealBluetoothFailure(link: InstantBluetoothLink, trigger: String): WirelessStartupException? {
+        val received = link.stream.bytesReceived
+        if (!BluetoothLinkCheck.looksUnreal(link.connectMillis, received)) return null
+        val started = System.nanoTime()
+        val control = runCatching {
+            link.device.createRfcommSocketToServiceRecord(UUID.randomUUID())
+                .use { connectBluetoothSocket(it, link.device.address) }
+        }
+        val controlMillis = elapsedMillis(started)
+        val unreal = BluetoothLinkCheck.controlProvesUnreal(control.isSuccess, controlMillis)
+        connectionDiagnostic(
+            "Bluetooth link check trigger=$trigger connectMs=${link.connectMillis} receivedBytes=$received " +
+                "controlConnect=${if (control.isSuccess) "succeeded" else "failed"} " +
+                "controlMs=$controlMillis unreal=$unreal",
+        )
+        if (!unreal) return null
+        return WirelessStartupException(
+            WirelessStartupFailure.BLUETOOTH_UNUSABLE,
+            "Android Bluetooth on this head unit reports ${BluetoothLinkCheck.UNREAL_MARK}: " +
+                "a connection to a service no phone offers also succeeded in ${controlMillis}ms",
+        )
+    }
+
     private fun connectBluetoothSocket(socket: BluetoothSocket, address: String) {
         val result = AtomicReference<Throwable?>()
         val connected = CountDownLatch(1)
@@ -2396,6 +2523,18 @@ class CarPlayController(
         buildSet {
             addAll(connectedBluetoothDevices(adapter, BluetoothProfile.HEADSET, BluetoothHeadset::class.java))
             addAll(connectedBluetoothDevices(adapter, BluetoothProfile.A2DP, BluetoothA2dp::class.java))
+            // A head unit is the sink side of a phone's audio and calls, so the iPhone shows up under
+            // these hidden profiles. Asked only when connected: an absent profile service never
+            // answers the proxy request and would cost its full timeout.
+            for (profile in intArrayOf(PROFILE_A2DP_SINK, PROFILE_HEADSET_CLIENT)) {
+                val connected = try {
+                    adapter.getProfileConnectionState(profile) == BluetoothProfile.STATE_CONNECTED
+                } catch (error: SecurityException) {
+                    Log.w(IphoneCarPlayConfiguration.TAG, "Could not read Bluetooth profile $profile state", error)
+                    false
+                }
+                if (connected) addAll(connectedBluetoothDevices(adapter, profile, BluetoothProfile::class.java))
+            }
         }
 
     private fun <T : BluetoothProfile> connectedBluetoothDevices(
@@ -2548,7 +2687,7 @@ class CarPlayController(
                 false
             }
             is CarPlayVpnService.AttachResult.Failed -> {
-                debugLog("wired VPN/NCM transport attach result=failed ${result.message}")
+                debugLog("wired VPN/NCM transport attach result=failed ${result.message} detail=${service.lastAttachFailure}")
                 ncm.close()
                 onStatus(CarPlayStatus.Failed(result.message))
                 false
@@ -2776,6 +2915,9 @@ class CarPlayController(
         private const val TELEPHONY_DROP = 3
         private val diagnosticAttempts = AtomicInteger()
         private const val IAP2_IPHONE_UUID = "00000000-deca-fade-deca-deafdecacafe"
+        // BluetoothProfile.A2DP_SINK and HEADSET_CLIENT, hidden from the public SDK.
+        private const val PROFILE_A2DP_SINK = 11
+        private const val PROFILE_HEADSET_CLIENT = 16
         private const val HOTSPOT_START_TIMEOUT_MILLIS = 60_000L
         private const val WIFI_P2P_START_TIMEOUT_MILLIS = 20_000L
         private const val PAIR_TIMEOUT_MILLIS = 5 * 60_000L

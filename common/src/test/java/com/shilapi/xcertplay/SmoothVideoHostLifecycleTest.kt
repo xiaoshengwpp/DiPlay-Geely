@@ -9,6 +9,7 @@ import android.view.Surface
 import android.view.SurfaceHolder
 import com.shilapi.xcertplay.airplay.AirPlayIdentity
 import com.shilapi.xcertplay.media.AndroidMediaSink
+import com.shilapi.xcertplay.media.CarPlayNowPlaying
 import com.shilapi.xcertplay.orchestration.CarPlayController
 import com.shilapi.xcertplay.orchestration.MfiTarget
 import java.nio.ByteBuffer
@@ -61,7 +62,9 @@ class SmoothVideoHostLifecycleTest {
         AirPlayPersistence.saveAdaptPipResolution(activity, false)
         AirPlayPersistence.saveMfiTarget(activity, MfiTarget.USB_CH341)
         // Host startup without vendor-service workers or real transports.
-        controllerConstruction = mockConstruction(CarPlayController::class.java)
+        controllerConstruction = mockConstruction(CarPlayController::class.java) { controller, _ ->
+            org.mockito.Mockito.`when`(controller.nowPlayingSnapshot()).thenReturn(CarPlayNowPlaying())
+        }
         (getField("teardownExecutor") as ExecutorService).shutdownNow()
         setField("teardownExecutor", PausedExecutorService())
         setField("activeDisplaySize", size(1920, 990))
@@ -95,6 +98,7 @@ class SmoothVideoHostLifecycleTest {
         setField("smoothVideo", true)
         allowStartup()
         val oldController = mock(CarPlayController::class.java)
+        `when`(oldController.nowPlayingSnapshot()).thenReturn(CarPlayNowPlaying())
         val oldSink = sink(pacingDelayMillis = 0)
         val stop = DeferredStop()
         CarPlayBackgroundSession.store(oldController, oldSink, 1920, 990, Any(), display, stop::invoke)
@@ -133,6 +137,7 @@ class SmoothVideoHostLifecycleTest {
             AirPlayPersistence.saveSmoothVideo(activity, smooth)
             setField("smoothVideo", smooth)
             val controller = mock(CarPlayController::class.java)
+            `when`(controller.nowPlayingSnapshot()).thenReturn(CarPlayNowPlaying())
             val sink = sink(pacingDelayMillis = if (smooth) smoothVideoDelayMillis(60) else 0)
             val stop = DeferredStop()
             CarPlayBackgroundSession.store(controller, sink, 1920, 990, Any(), display, stop::invoke)
@@ -152,6 +157,7 @@ class SmoothVideoHostLifecycleTest {
         setField("smoothVideo", false)
         allowStartup()
         val controller = mock(CarPlayController::class.java)
+        `when`(controller.nowPlayingSnapshot()).thenReturn(CarPlayNowPlaying())
         val sink = sink(pacingDelayMillis = 0)
         setField("controller", controller)
         setField("sink", sink)
@@ -197,6 +203,7 @@ class SmoothVideoHostLifecycleTest {
     // its decoders release their codecs it may still render to the SurfaceView being destroyed.
     @Test fun aShutdownDuringARestartKeepsTheRestartsSinkDetachable() {
         val controller = mock(CarPlayController::class.java)
+        `when`(controller.nowPlayingSnapshot()).thenReturn(CarPlayNowPlaying())
         val restarting = spy(AndroidMediaSink()).also(ownedSinks::add)
         setField("controller", controller)
         setField("sink", restarting)
@@ -248,6 +255,7 @@ class SmoothVideoHostLifecycleTest {
                 log.msg + (log.throwable?.let { ": $it" } ?: "")
             }}", enteredCodec)
         val controller = mock(CarPlayController::class.java)
+        `when`(controller.nowPlayingSnapshot()).thenReturn(CarPlayNowPlaying())
         setField("controller", controller)
         setField("sink", closing)
         CarPlayBackgroundSession.store(controller, closing, 1920, 990, activity, display) { it() }

@@ -21,7 +21,7 @@ import org.mockito.Mockito.mock
 import org.mockito.Mockito.never
 import org.mockito.Mockito.times
 import org.mockito.Mockito.verify
-import org.mockito.Mockito.verifyNoInteractions
+import org.mockito.Mockito.`when`
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.Shadows.shadowOf
@@ -42,9 +42,12 @@ class CarPlayMediaMetadataPublicationTest {
     )
 
     @Before fun setUp() {
-        controller = mock(CarPlayController::class.java)
+        controller = retainedController()
         session = mock(MediaSession::class.java)
         CarPlayMediaKeys.attach(RuntimeEnvironment.getApplication(), controller)
+        // 0.2.18 attaches by replaying the retained snapshot on the main queue. Finish that
+        // empty initial replay before observing the publications exercised by each test.
+        drainMainThread()
         setField("session", session)
     }
 
@@ -65,8 +68,8 @@ class CarPlayMediaMetadataPublicationTest {
             song.copy(elapsedMillis = 1_450, playing = true),
             song.copy(elapsedMillis = 2_000),
         )
-        updates.forEach { queueUpdate(controller, it) }
-        drainMainThread()
+        // Each phone update becomes retained state before its notification is delivered.
+        updates.forEach(::publish)
 
         verify(session, never()).setMetadata(any(MediaMetadata::class.java))
         val states = ArgumentCaptor.forClass(PlaybackState::class.java)
@@ -79,6 +82,19 @@ class CarPlayMediaMetadataPublicationTest {
         )
         assertEquals(listOf(1f, 0f, 1f, 1f), states.allValues.map { it.playbackSpeed })
         assertEquals(updates.last(), getField("nowPlaying"))
+
+        // Notifications queued together read current retained state when delivered; an earlier
+        // position must not roll a newer snapshot back or cause metadata publication spam.
+        clearInvocations(session)
+        queueUpdate(controller, song.copy(elapsedMillis = 2_500))
+        val latest = song.copy(elapsedMillis = 3_000)
+        queueUpdate(controller, latest)
+        drainMainThread()
+        verify(session, never()).setMetadata(any(MediaMetadata::class.java))
+        val queuedStates = ArgumentCaptor.forClass(PlaybackState::class.java)
+        verify(session, times(2)).setPlaybackState(queuedStates.capture())
+        assertEquals(listOf(3_000L, 3_000L), queuedStates.allValues.map { it.position })
+        assertEquals(latest, getField("nowPlaying"))
     }
 
     @Test fun songAndCachedArtworkChangesPublishTheNewMetadataAndArtworkRemoval() {
@@ -117,9 +133,13 @@ class CarPlayMediaMetadataPublicationTest {
         val decoded = bitmap()
         val owner = getField("artworkOwner")!!
 
+        // The decoder now publishes bitmap plus its ambient palette result as one value.
+        val resultType = CarPlayMediaKeys::class.java.declaredClasses.single { it.simpleName == "AmbientArtwork" }
+        val result = resultType.getDeclaredConstructor(Bitmap::class.java, Int::class.javaObjectType)
+            .apply { isAccessible = true }.newInstance(decoded, null)
         CarPlayMediaKeys::class.java.getDeclaredMethod(
-            "onArtworkDecoded", Any::class.java, Int::class.javaPrimitiveType, Bitmap::class.java,
-        ).apply { isAccessible = true }.invoke(CarPlayMediaKeys, owner, 7, decoded)
+            "onArtworkDecoded", Any::class.java, Int::class.javaPrimitiveType, resultType,
+        ).apply { isAccessible = true }.invoke(CarPlayMediaKeys, owner, 7, result)
         publish(song.copy(elapsedMillis = 2_000))
 
         val metadata = ArgumentCaptor.forClass(MediaMetadata::class.java)
@@ -131,16 +151,23 @@ class CarPlayMediaMetadataPublicationTest {
 
     @Test fun anUpdateQueuedByTheOldControllerCannotPublishIntoTheReplacementSession() {
         queueUpdate(controller, song)
-        val replacement = mock(CarPlayController::class.java)
+        val replacement = retainedController()
         val replacementSession = mock(MediaSession::class.java)
         CarPlayMediaKeys.attach(RuntimeEnvironment.getApplication(), replacement)
         setField("session", replacementSession)
 
         drainMainThread()
 
-        verifyNoInteractions(replacementSession)
+        // The replacement legitimately replays its empty snapshot once. The old controller's
+        // already queued callback must produce neither metadata nor an extra playback state.
+        verify(replacementSession, never()).setMetadata(any(MediaMetadata::class.java))
+        val initialState = ArgumentCaptor.forClass(PlaybackState::class.java)
+        verify(replacementSession, times(1)).setPlaybackState(initialState.capture())
+        assertEquals(PlaybackState.PLAYBACK_POSITION_UNKNOWN, initialState.value.position)
+        assertEquals(PlaybackState.STATE_PAUSED, initialState.value.state)
         assertEquals(CarPlayNowPlaying(), getField("nowPlaying"))
         assertNull(getField("artwork"))
+        clearInvocations(replacementSession)
         queueUpdate(replacement, song.copy(title = "Current controller"))
         drainMainThread()
         val metadata = ArgumentCaptor.forClass(MediaMetadata::class.java)
@@ -154,10 +181,15 @@ class CarPlayMediaMetadataPublicationTest {
         drainMainThread()
     }
 
+    private fun retainedController(): CarPlayController = mock(CarPlayController::class.java).also {
+        `when`(it.nowPlayingSnapshot()).thenReturn(CarPlayNowPlaying())
+    }
+
     private fun queueUpdate(expected: CarPlayController, update: CarPlayNowPlaying) {
+        `when`(expected.nowPlayingSnapshot()).thenReturn(update)
         CarPlayMediaKeys::class.java.getDeclaredMethod(
-            "onNowPlayingChanged", CarPlayController::class.java, CarPlayNowPlaying::class.java,
-        ).apply { isAccessible = true }.invoke(CarPlayMediaKeys, expected, update)
+            "onNowPlayingChanged", CarPlayController::class.java,
+        ).apply { isAccessible = true }.invoke(CarPlayMediaKeys, expected)
     }
 
     private fun drainMainThread() = shadowOf(Looper.getMainLooper()).idle()

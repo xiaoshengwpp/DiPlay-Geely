@@ -8,19 +8,37 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class CarHotspotAdbFallbackTest {
+    @Test fun productionFallbackNeverInvokesCallbacksOrRunsCommands() {
+        assertFalse(CarHotspotAdbFallback.start(
+            -1,
+            cancelled = { error("Must not inspect cancellation") },
+            state = { error("Must not read hotspot state") },
+            shell = { _, _ -> error("Must not execute a shell command") },
+            log = { error("Must not log disabled activity") },
+        ))
+    }
+
+    @Test fun productionCommandAdapterNeverEmitsCommandsEvenWhenAdvertised() {
+        for (service in listOf("connectivity", "tethering", "wifi")) {
+            for (help in listOf("  start-tethering wifi", "  start wifi [options]", null)) {
+                assertNull(CarHotspotAdbFallback.advertisedCommand(service, help))
+            }
+        }
+    }
+
     private fun deadline(ms: Long = 1_000) = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(ms)
 
     @Test fun genericAospHelpNeverTriggersTheGuessedCommands() {
-        assertNull(CarHotspotAdbFallback.advertisedCommand("connectivity", "Connectivity service commands:\n  help\n  airplane-mode [enable|disable]"))
-        assertNull(CarHotspotAdbFallback.advertisedCommand("tethering", "Unknown command: help"))
-        assertNull(CarHotspotAdbFallback.advertisedCommand("wifi", "  start-softap <ssid> open"))
+        assertNull(OfflineCarHotspotAdbFallback.advertisedCommand("connectivity", "Connectivity service commands:\n  help\n  airplane-mode [enable|disable]"))
+        assertNull(OfflineCarHotspotAdbFallback.advertisedCommand("tethering", "Unknown command: help"))
+        assertNull(OfflineCarHotspotAdbFallback.advertisedCommand("wifi", "  start-softap <ssid> open"))
     }
 
     @Test fun advertisedFirmwareFormsAreSelectedWithoutProbingMutatingCommands() {
-        assertEquals("cmd connectivity start-tethering wifi", CarHotspotAdbFallback.advertisedCommand("connectivity", "  start-tethering wifi"))
-        assertEquals("cmd tethering start-tethering wifi", CarHotspotAdbFallback.advertisedCommand("tethering", "  start-tethering <wifi|usb|bluetooth>"))
-        assertEquals("cmd tethering start wifi", CarHotspotAdbFallback.advertisedCommand("tethering", "  start wifi [options]"))
-        assertNull(CarHotspotAdbFallback.advertisedCommand("tethering", "Example: start wifi\n  start <type>"))
+        assertEquals("cmd connectivity start-tethering wifi", OfflineCarHotspotAdbFallback.advertisedCommand("connectivity", "  start-tethering wifi"))
+        assertEquals("cmd tethering start-tethering wifi", OfflineCarHotspotAdbFallback.advertisedCommand("tethering", "  start-tethering <wifi|usb|bluetooth>"))
+        assertEquals("cmd tethering start wifi", OfflineCarHotspotAdbFallback.advertisedCommand("tethering", "  start wifi [options]"))
+        assertNull(OfflineCarHotspotAdbFallback.advertisedCommand("tethering", "Example: start wifi\n  start <type>"))
     }
 
     @Test fun aZeroExitCodeCannotHidePermissionOrUnknownCommandOutput() {
@@ -33,7 +51,7 @@ class CarHotspotAdbFallbackTest {
     @Test fun shellAcceptanceStillWaitsForAnActualApState() {
         var on = false
         val commands = mutableListOf<String>()
-        assertTrue(CarHotspotAdbFallback.start(deadline(), { false }, { on }, { command, _ ->
+        assertTrue(OfflineCarHotspotAdbFallback.start(deadline(), { false }, { on }, { command, _ ->
             commands += command
             if (command.endsWith("help")) "  start-tethering wifi" else {
                 on = true
@@ -43,23 +61,23 @@ class CarHotspotAdbFallbackTest {
         assertEquals(2, commands.size)
         assertFalse(commands.last().contains("||"))
         assertTrue(commands.last().contains("\$?"))
-        assertFalse(CarHotspotAdbFallback.start(deadline(20), { false }, { false }, { command, _ ->
+        assertFalse(OfflineCarHotspotAdbFallback.start(deadline(20), { false }, { false }, { command, _ ->
             if (command.endsWith("help")) "  start-tethering wifi" else "DIPLAY_HOTSPOT_EXIT:0"
         }, {}))
     }
 
     @Test fun noStatusOrCapabilityMeansNoMutation() {
         val commands = mutableListOf<String>()
-        assertFalse(CarHotspotAdbFallback.start(deadline(), { false }, { null }, { command, _ -> commands += command; null }, {}))
+        assertFalse(OfflineCarHotspotAdbFallback.start(deadline(), { false }, { null }, { command, _ -> commands += command; null }, {}))
         assertEquals(listOf("dumpsys wifi"), commands)
         commands.clear()
-        assertFalse(CarHotspotAdbFallback.start(deadline(), { false }, { false }, { command, _ -> commands += command; "  help" }, {}))
+        assertFalse(OfflineCarHotspotAdbFallback.start(deadline(), { false }, { false }, { command, _ -> commands += command; "  help" }, {}))
         assertTrue(commands.all { it.endsWith("help") })
     }
 
     @Test fun unknownAppStatusCanBeConfirmedThroughCurrentTetheredApDump() {
         var on = false
-        assertTrue(CarHotspotAdbFallback.start(deadline(), { false }, { null }, { command, _ ->
+        assertTrue(OfflineCarHotspotAdbFallback.start(deadline(), { false }, { null }, { command, _ ->
             when {
                 command == "dumpsys wifi" -> "mWifiApState: ${if (on) 13 else 11}"
                 command.endsWith("help") -> "  start-tethering wifi"
@@ -91,7 +109,7 @@ class CarHotspotAdbFallbackTest {
     @Test fun cancellationAfterCapabilityReadPreventsMutation() {
         var cancelled = false
         val commands = mutableListOf<String>()
-        assertFalse(CarHotspotAdbFallback.start(deadline(), { cancelled }, { false }, { command, _ ->
+        assertFalse(OfflineCarHotspotAdbFallback.start(deadline(), { cancelled }, { false }, { command, _ ->
             commands += command; cancelled = true; "  start-tethering wifi"
         }, {}))
         assertEquals(listOf("cmd connectivity help"), commands)

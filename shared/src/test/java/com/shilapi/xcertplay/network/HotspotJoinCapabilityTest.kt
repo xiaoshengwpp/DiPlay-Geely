@@ -10,9 +10,20 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
+/** Historical callback codec fixtures stay test-only; live capability readers are inert. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [33], manifest = Config.NONE)
 class HotspotJoinCapabilityTest {
+    @Test fun productionCapabilityReadsNeverRegisterOrInspectInjectedObjects() {
+        val registration = object : HotspotJoinCapability.Registration {
+            override fun register(callback: IInterface) = error("Must not register a callback")
+            override fun unregister(callback: IInterface) = error("Must not unregister a callback")
+        }
+        assertNull(HotspotJoinCapability.read(Any()))
+        assertNull(HotspotJoinCapability.read(registration, -1))
+        assertNull(HotspotJoinCapability.read(registration))
+    }
+
     private class Registration(private val capability: Any? = null, private val denied: Boolean = false) :
         HotspotJoinCapability.Registration {
         var registered: IInterface? = null
@@ -35,7 +46,7 @@ class HotspotJoinCapabilityTest {
         val type = Class.forName("android.net.wifi.SoftApCapability")
         val feature = type.getField("SOFTAP_FEATURE_BAND_5G_SUPPORTED").getLong(null)
         val registration = Registration(capability(feature, intArrayOf(36, 44)))
-        val snapshot = HotspotJoinCapability.read(registration, 10)!!
+        val snapshot = OfflineHotspotJoinCapability.read(registration, 10)!!
         assertTrue(snapshot.allows(0)); assertTrue(snapshot.allows(44)); assertFalse(snapshot.allows(48))
         assertSame(registration.registered, registration.unregistered)
     }
@@ -52,7 +63,7 @@ class HotspotJoinCapabilityTest {
             }
             null
         }
-        assertTrue(HotspotJoinCapability.read(wifi)!!.allows(44))
+        assertTrue(OfflineHotspotJoinCapability.read(wifi)!!.allows(44))
         assertSame(registration.registered, registration.unregistered)
     }
     @Test fun unsupportedAndEmptyChannelReportsCannotApproveARepair() {
@@ -60,20 +71,20 @@ class HotspotJoinCapabilityTest {
             .getField("SOFTAP_FEATURE_BAND_5G_SUPPORTED").getLong(null)
         for (capability in listOf(capability(0, intArrayOf(36)), capability(feature, intArrayOf()))) {
             val registration = Registration(capability)
-            val snapshot = HotspotJoinCapability.read(registration, 10)!!
+            val snapshot = OfflineHotspotJoinCapability.read(registration, 10)!!
             assertFalse(snapshot.allows(0)); assertFalse(snapshot.allows(36))
             assertSame(registration.registered, registration.unregistered)
         }
     }
     @Test fun missingDeniedOrInterruptedCallbacksFailClosedAndReleaseRegistration() {
         for (registration in listOf(Registration(), Registration(denied = true))) {
-            assertNull(HotspotJoinCapability.read(registration, 1))
+            assertNull(OfflineHotspotJoinCapability.read(registration, 1))
             assertSame(registration.registered, registration.unregistered)
         }
         val interrupted = Registration()
         Thread.currentThread().interrupt()
         try {
-            assertNull(HotspotJoinCapability.read(interrupted, 10))
+            assertNull(OfflineHotspotJoinCapability.read(interrupted, 10))
             assertTrue(Thread.currentThread().isInterrupted)
             assertSame(interrupted.registered, interrupted.unregistered)
         } finally { Thread.interrupted() }
@@ -91,7 +102,7 @@ class HotspotJoinCapabilityTest {
                 }
                 override fun unregister(callback: IInterface) { unregistered = callback }
             }
-            assertNull(HotspotJoinCapability.read(registration, 10))
+            assertNull(OfflineHotspotJoinCapability.read(registration, 10))
             assertSame(registered, unregistered)
         }
     }

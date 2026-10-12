@@ -17,6 +17,7 @@ import java.net.DatagramSocket
 import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.util.concurrent.atomic.AtomicBoolean
+import com.shilapi.xcertplay.telecom.PhoneAudioRoute
 
 /**
  * Captures one PCM microphone stream and sends it back to the phone as sealed CarPlay RTP.
@@ -74,12 +75,7 @@ internal class MicrophoneUplink(
             return false
         }
 
-        val source = when {
-            config.audioType == "telephony" && speakerphoneCall -> MediaRecorder.AudioSource.MIC
-            config.audioType == "telephony" -> MediaRecorder.AudioSource.VOICE_COMMUNICATION
-            config.audioType == "speechrecognition" -> MediaRecorder.AudioSource.VOICE_RECOGNITION
-            else -> MediaRecorder.AudioSource.MIC
-        }
+        val source = microphoneAudioSource(config.audioType, speakerphoneCall)
         val nextEncoder = if (config.codec == AudioCodecKind.OPUS) {
             opusEncoderFactory(config.bitrate ?: 48_000)
         } else {
@@ -189,6 +185,12 @@ internal class MicrophoneUplink(
     }
 
     private fun voiceEffects(sessionId: Int): List<AudioEffect> {
+        if (PhoneAudioRoute.carPlayCallsUseCarAudio()) {
+            // In the car's phone audio state its own processing handles echo and noise, and was only measured
+            // with the platform effects off.
+            Log.i(TAG, "microphone effects left to the car's phone audio state")
+            return emptyList()
+        }
         var aec: AudioEffect? = null
         if (echoCanceller != null) {
             // VOICE_COMMUNICATION can enable AEC by default. Keep its controller alive and
@@ -484,4 +486,19 @@ internal class CaptureClock(private val sampleRate: Int) {
     private companion object {
         const val FALLBACK_LATENCY_NS = 20_000_000L
     }
+}
+
+/** Source selection keeps the independently gated Geely override out of core capture. */
+internal fun microphoneAudioSource(audioType: String, speakerphoneCall: Boolean): Int = when {
+    audioType == "telephony" && speakerphoneCall -> MediaRecorder.AudioSource.MIC
+    audioType == "telephony" -> MediaRecorder.AudioSource.VOICE_COMMUNICATION
+    // The upstream vendor workaround needs its own verification; model detection cannot enable it.
+    audioType == "speechrecognition" ->
+        if (com.shilapi.xcertplay.hud.GeelyVendorPolicy.geelyMicrophoneOverride &&
+            com.shilapi.xcertplay.network.GeelyHeadUnit.detected) {
+            MediaRecorder.AudioSource.VOICE_COMMUNICATION
+        } else {
+            MediaRecorder.AudioSource.VOICE_RECOGNITION
+        }
+    else -> MediaRecorder.AudioSource.MIC
 }

@@ -2,6 +2,7 @@ package com.shilapi.xcertplay
 
 import android.content.Context
 import android.provider.Settings
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Before
@@ -58,12 +59,16 @@ class UsbAutoConfirmServiceTest {
         assertFalse(UsbAutoConfirmService.isSystemUsbWindow("com.android.systemui", "com.android.systemui.media.MediaProjectionPermissionActivity"))
     }
 
-    @Test fun promptMustNameDiPlayAndUsbExplicitly() {
-        assertTrue(UsbAutoConfirmService.isTargetPrompt("Allow DiPlay to access this USB device?", "DiPlay"))
-        assertTrue(UsbAutoConfirmService.isTargetPrompt("允许 DiPlay 访问 USB 设备？", "DiPlay"))
+    @Test fun promptMustNameDiPlayInEveryAndroidWording() {
+        // Android 7.1 and 10+ wording, in English and Chinese (#409, #521).
+        assertTrue(UsbAutoConfirmService.isTargetPrompt("Allow the app DiPlay to access the USB device?", "DiPlay"))
+        assertTrue(UsbAutoConfirmService.isTargetPrompt("允许应用“DiPlay”访问该USB设备吗？", "DiPlay"))
+        assertTrue(UsbAutoConfirmService.isTargetPrompt("Allow DiPlay to access iPhone?", "DiPlay"))
+        assertTrue(UsbAutoConfirmService.isTargetPrompt("要允许DiPlay访问iPhone吗？", "DiPlay"))
+        assertTrue(UsbAutoConfirmService.isTargetPrompt("Always open DiPlay when iPhone is connected", "DiPlay"))
         assertFalse(UsbAutoConfirmService.isTargetPrompt("Allow CarPlay access to iPhone?", "DiPlay"))
-        assertFalse(UsbAutoConfirmService.isTargetPrompt("Allow DiPlay to access your contacts?", "DiPlay"))
-        assertFalse(UsbAutoConfirmService.isTargetPrompt("Allow FakeDiPlay USB access?", "DiPlay"))
+        assertFalse(UsbAutoConfirmService.isTargetPrompt("Allow FakeDiPlay to access iPhone?", "DiPlay"))
+        assertFalse(UsbAutoConfirmService.isTargetPrompt("要允许DiPlayer访问iPhone吗？", "DiPlay"))
         assertFalse(UsbAutoConfirmService.isTargetPrompt("Allow USB access?", ""))
     }
     @Test fun evenAMatchingSystemUsbPromptIsNeverClickedByGeely() {
