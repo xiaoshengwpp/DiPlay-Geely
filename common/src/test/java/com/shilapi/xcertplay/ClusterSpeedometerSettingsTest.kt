@@ -83,7 +83,7 @@ class ClusterSpeedometerSettingsTest {
         controller.pause().stop().destroy()
     }
 
-    @Test fun speedometerControlsOnlyAppearWithClusterMapEnabled() {
+    @Test fun speedometerControlsStayHiddenEvenWithStaleClusterMapPreference() {
         val controller = Robolectric.buildActivity(DiPlayActivity::class.java,
             Intent(context, DiPlayActivity::class.java).putExtra("page", "settings")).setup()
         val activity = controller.get()
@@ -96,10 +96,13 @@ class ClusterSpeedometerSettingsTest {
         }
         ReflectionHelpers.callInstanceMethod<Unit>(activity, "render")
         assertFalse(hasToggle())
-        AirPlayPersistence.saveClusterMapEnabled(context, true)
+        val prefs = context.getSharedPreferences("xcertplay_airplay", 0)
+        prefs.edit().putBoolean("cluster_map_enabled", true).commit()
         ReflectionHelpers.callInstanceMethod<Unit>(activity, "render")
-        assertTrue(hasToggle())
-        AirPlayPersistence.saveClusterMapEnabled(context, false)
+        assertFalse(hasToggle())
+        assertTrue("Rendering must not rewrite the saved preference", prefs.getBoolean("cluster_map_enabled", false))
+        assertFalse("The public getter must reject stale consent", AirPlayPersistence.loadClusterMapEnabled(context))
+        prefs.edit().putBoolean("cluster_map_enabled", false).commit()
         ReflectionHelpers.callInstanceMethod<Unit>(activity, "render")
         assertFalse(hasToggle())
         controller.pause().stop().destroy()

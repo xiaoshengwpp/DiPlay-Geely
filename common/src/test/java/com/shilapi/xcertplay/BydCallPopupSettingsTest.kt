@@ -4,80 +4,51 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.Switch
-import android.graphics.Bitmap
-import android.graphics.Canvas
 import com.shilapi.xcertplay.host.R
-import java.io.File
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
-import org.robolectric.annotation.GraphicsMode
 import org.robolectric.util.ReflectionHelpers
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [32], qualifiers = "en", manifest = Config.NONE)
 class BydCallPopupSettingsTest {
-    @Test fun popupOptInDefaultsOffAndChangesOnlyItsPreferenceWithoutReconnect() {
-        val activity = Robolectric.buildActivity(DiPlayActivity::class.java).get()
-        activity.setTheme(android.R.style.Theme_Material_NoActionBar)
-        val prefs = activity.getSharedPreferences("xcertplay_airplay", 0)
-        prefs.edit().clear().commit()
-        ReflectionHelpers.setField(activity, "settingsSectionFilter", setOf(SettingsSection.ADVANCED_MEDIA))
-        val content = LinearLayout(activity)
-        ReflectionHelpers.callInstanceMethod<Unit>(activity, "allSettingsSections",
-            ReflectionHelpers.ClassParameter.from(LinearLayout::class.java, content))
-        val popup = switches(content).singleOrNull { it.contentDescription == "Hide BYD call popup (experimental)" }
-        assertNotNull("Android 12L must expose the opt-in popup control", popup)
-        assertFalse(popup!!.isChecked)
-        val before = prefs.all.toMap()
-        popup.isChecked = true
-        assertEquals(before + ("hide_byd_call_popup" to true), prefs.all)
-        popup.isChecked = false
-        assertEquals(before + ("hide_byd_call_popup" to false), prefs.all)
-        assertFalse(PendingReconnect.isPending(null))
+    @Test fun popupControlIsAbsentWithoutChangingEitherSavedChoice() {
+        for (saved in listOf(false, true)) assertPopupUnavailable(saved)
     }
 
-    @Test
-    @GraphicsMode(GraphicsMode.Mode.NATIVE)
-    @Config(qualifiers = "en-w320dp-h800dp-xhdpi")
-    fun compactLargeFontPopupRowRendersWithoutClipping() = renderPopupRow("compact", 320)
+    @Test @Config(qualifiers = "en-w320dp-h800dp-xhdpi")
+    fun compactLargeFontMediaSettingsDoNotExposeDisabledPopup() = assertPopupUnavailable(true)
 
-    @Test
-    @GraphicsMode(GraphicsMode.Mode.NATIVE)
-    @Config(qualifiers = "ar-ldrtl-w600dp-h800dp-xhdpi")
-    fun fullWidthArabicLargeFontPopupRowRendersWithoutClipping() = renderPopupRow("full-ar", 600)
+    @Test @Config(qualifiers = "ar-ldrtl-w600dp-h800dp-xhdpi")
+    fun fullWidthArabicMediaSettingsDoNotExposeDisabledPopup() = assertPopupUnavailable(true)
 
-    private fun renderPopupRow(name: String, widthDp: Int) {
+    private fun assertPopupUnavailable(saved: Boolean) {
         val activity = Robolectric.buildActivity(DiPlayActivity::class.java).get()
-        activity.applicationInfo.flags = activity.applicationInfo.flags or android.content.pm.ApplicationInfo.FLAG_SUPPORTS_RTL
         activity.setTheme(android.R.style.Theme_Material_NoActionBar)
-        val configuration = android.content.res.Configuration(activity.resources.configuration).apply { fontScale = 1.6f }
-        @Suppress("DEPRECATION")
-        activity.resources.updateConfiguration(configuration, activity.resources.displayMetrics)
+        val original = android.content.res.Configuration(activity.resources.configuration)
+        activity.resources.updateConfiguration(android.content.res.Configuration(original).apply { fontScale = 1.6f }, activity.resources.displayMetrics)
+        val prefs = activity.getSharedPreferences("xcertplay_airplay", 0)
+        prefs.edit().clear().putBoolean("hide_byd_call_popup", saved).commit()
+        val before = prefs.all.toMap()
+        PendingReconnect.clear()
         ReflectionHelpers.setField(activity, "settingsSectionFilter", setOf(SettingsSection.ADVANCED_MEDIA))
-        val content = LinearLayout(activity)
-        ReflectionHelpers.callInstanceMethod<Unit>(activity, "allSettingsSections",
-            ReflectionHelpers.ClassParameter.from(LinearLayout::class.java, content))
-        val popup = switches(content).single { it.contentDescription == activity.getString(R.string.settings_hide_byd_call_popup) }
-        val row = popup.parent as ViewGroup
-        row.layoutDirection = configuration.layoutDirection
-        val width = (widthDp * activity.resources.displayMetrics.density).toInt()
-        row.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
-            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
-        row.layout(0, 0, width, row.measuredHeight)
-        assertTrue(popup.right <= width && popup.left >= 0)
-        assertTrue(popup.bottom <= row.height && row.height > 0)
-        val bitmap = Bitmap.createBitmap(width, row.height, Bitmap.Config.ARGB_8888)
-        val canvas = Canvas(bitmap)
-        canvas.drawColor(android.graphics.Color.rgb(28, 32, 42))
-        row.draw(canvas)
-        val directory = File("build/call-popup-screenshots").apply { mkdirs() }
-        val output = File(directory, "$name.png")
-        output.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
-        bitmap.recycle()
+        repeat(2) {
+            val content = LinearLayout(activity)
+            ReflectionHelpers.callInstanceMethod<Unit>(activity, "allSettingsSections",
+                ReflectionHelpers.ClassParameter.from(LinearLayout::class.java, content))
+            val controls = switches(content)
+            assertFalse(controls.any { it.contentDescription == activity.getString(R.string.settings_hide_byd_call_popup) })
+            assertTrue("Ordinary media settings remain available", controls.any { it.contentDescription == activity.getString(R.string.efficient_video) })
+            assertEquals(before, prefs.all)
+            assertNull("No reconnect marker may be created",
+                ReflectionHelpers.getField<java.lang.ref.WeakReference<Any>>(PendingReconnect, "session").get())
+        }
+        activity.finish()
+        activity.resources.updateConfiguration(original, activity.resources.displayMetrics)
     }
 
     private fun switches(view: View): List<Switch> = when (view) {

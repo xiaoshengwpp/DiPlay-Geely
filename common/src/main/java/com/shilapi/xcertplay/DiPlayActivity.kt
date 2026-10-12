@@ -361,7 +361,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             openProjection(); finish(); return
         }
         scheduleBackgroundUpdateChecks()
-        availableUpdate = UpdateAvailability.available(this, version())
+        availableUpdate = if (GeelyVendorPolicy.upstreamApkUpdates) UpdateAvailability.available(this, version()) else null
         enforceInterfaceSize()
         refreshAppearance()
         rememberLaunchAppearance()
@@ -902,7 +902,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         if (!compact) right.addView(label(getString(R.string.make_diplay_feel_right_for_your_car), 14, MUTED).apply { gravity = Gravity.CENTER; setPadding(0, dp(10), 0, dp(24)) })
         else right.addView(space(12))
         right.addView(label(getString(R.string.home_public_preview, version()), 12, MUTED).apply { letterSpacing = .08f })
-        availableUpdate?.let { release ->
+        availableUpdate?.takeIf { GeelyVendorPolicy.upstreamApkUpdates }?.let { release ->
             val message = getString(R.string.update_available_home)
             val tint = { alpha: Int -> (WARNING and 0x00FFFFFF) or (alpha shl 24) }
             val chip = GradientDrawable().apply {
@@ -1809,7 +1809,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         // Opt-in controls that can cost sound or video on some head units.
         filteredSection(content, SettingsSection.ADVANCED_MEDIA,
             getString(R.string.settings_advanced_media), R.drawable.ic_dp_advanced) { card ->
-            if (Build.VERSION.SDK_INT == 32) {
+            if (GeelyVendorPolicy.bydAdb && Build.VERSION.SDK_INT == 32) {
                 toggle(card, getString(R.string.settings_hide_byd_call_popup),
                     getString(R.string.settings_hide_byd_call_popup_description),
                     AirPlayPersistence.loadHideBydCallPopup(this)) {
@@ -2434,6 +2434,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     }
 
     private fun openAvailableUpdate(release: UpdateRelease) {
+        if (!GeelyVendorPolicy.upstreamApkUpdates) return
         updateRelease = release
         updateMessage = null
         updateStage = UpdateStage.AVAILABLE
