@@ -6,6 +6,9 @@
 # Gradle and local tooling
 .gradle/
 .kotlin/
+__pycache__/
+*.pyc
+.android-sdk/
 build/
 local.properties
 

@@ -1,0 +1,5 @@
+<resources>
+    <string name="byd_integration_disabled_geely">BYD vehicle integrations are disabled in this experimental Geely build.</string>
+    <string name="geely_navigation_audio_retained">Keep existing navigation routing</string>
+    <string name="geely_upstream_update_disabled">Official upstream APK updates are disabled in this experimental Geely build because they do not preserve its vehicle safety boundaries.</string>
+</resources>

@@ -1,5 +1,7 @@
 package com.shilapi.xcertplay
 
+import com.shilapi.xcertplay.hud.GeelyVendorPolicy
+
 import android.app.AppOpsManager
 import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
@@ -26,6 +28,7 @@ internal class DiLink51ClusterMonitor(context: Context, private val onState: (Cl
     private data class EventKey(val pkg: String?, val name: String?, val id: Int, val type: Int, val time: Long)
 
     fun start() {
+        if (!GeelyVendorPolicy.bydCluster) return
         executor.scheduleWithFixedDelay({ poll() }, 0, 500, TimeUnit.MILLISECONDS)
     }
 
@@ -38,6 +41,7 @@ internal class DiLink51ClusterMonitor(context: Context, private val onState: (Cl
     private fun bootTime() = (System.currentTimeMillis() - SystemClock.elapsedRealtime()).coerceAtLeast(0)
 
     private fun poll() {
+        if (!GeelyVendorPolicy.bydCluster) return
         if (stopped) return
         val now = System.currentTimeMillis()
         val snapshot = try {

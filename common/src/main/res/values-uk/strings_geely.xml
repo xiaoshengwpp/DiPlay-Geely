@@ -1,0 +1,5 @@
+<resources>
+    <string name="byd_integration_disabled_geely">Функції автомобілів BYD вимкнено в цій експериментальній збірці для Geely.</string>
+    <string name="geely_navigation_audio_retained">Зберегти поточну маршрутизацію звуку навігації</string>
+    <string name="geely_upstream_update_disabled">Офіційні APK-оновлення початкового проєкту вимкнено в цій експериментальній збірці для Geely, оскільки вони не зберігають обмеження безпеки функцій автомобіля.</string>
+</resources>

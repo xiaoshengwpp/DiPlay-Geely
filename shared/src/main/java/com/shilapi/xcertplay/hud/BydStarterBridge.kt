@@ -26,6 +26,7 @@ object BydStarterBridge {
     private var lastNotice: String? = null
 
     @Synchronized fun initialize(context: Context) {
+        if (!GeelyVendorPolicy.bydDiagnostics) return
         if (context.packageName !in setOf("com.andrerinas.headunitrevived.bydhudtest", "com.shihab.diplay.hudtest") || started) return
         val saved = context.getSharedPreferences("hud_starter", Context.MODE_PRIVATE).getString("token", null)
         token = decodeToken(saved)
@@ -36,6 +37,7 @@ object BydStarterBridge {
     }
 
     @Synchronized fun configure(context: Context, secret: String) {
+        if (!GeelyVendorPolicy.bydDiagnostics) return
         check(context.packageName in setOf("com.andrerinas.headunitrevived.bydhudtest", "com.shihab.diplay.hudtest"))
         val parsed = requireNotNull(decodeToken(secret)) { "Invalid starter token" }
         context.getSharedPreferences("hud_starter", Context.MODE_PRIVATE).edit().putString("token", secret).apply()
@@ -48,20 +50,27 @@ object BydStarterBridge {
         ?.let { value -> ByteArray(32) { value.substring(it * 2, it * 2 + 2).toInt(16).toByte() } }
 
     fun update(icon: Int, exit: Int, distance: Int) {
+        if (!GeelyVendorPolicy.bydDiagnostics) return
         val turn = BydFactoryTurnCode.map(icon, exit)
         latest = if (turn != null && distance in 0..16777214) Frame(turn, distance, SystemClock.elapsedRealtime()) else null
     }
 
-    fun clear(cancelDemo: Boolean = true) { latest = null; if (cancelDemo) demoStartMs = null }
+    fun clear(cancelDemo: Boolean = true) {
+        if (!GeelyVendorPolicy.bydDiagnostics) return
+        latest = null
+        if (cancelDemo) demoStartMs = null
+    }
 
     /** Called only by the DUMP-protected debug receiver after the parked-demo request. */
     fun demonstrate(context: Context) {
+        if (!GeelyVendorPolicy.bydDiagnostics) return
         initialize(context)
         demoStartMs = SystemClock.elapsedRealtime()
         Log.i(TAG, "Parked demo requested: left 500m, right 800m, then clear")
     }
 
     private fun tick() {
+        if (!GeelyVendorPolicy.bydDiagnostics) return
         try {
             val now = SystemClock.elapsedRealtime()
             val demo = demoStartMs
@@ -103,6 +112,7 @@ object BydStarterBridge {
     }
 
     private fun send(operation: Int, turn: Int, distance: Int) {
+        if (!GeelyVendorPolicy.bydDiagnostics) return
         val out = checkNotNull(output)
         out.writeInt(MAGIC); out.writeInt(operation); out.writeInt(turn); out.writeInt(distance); out.flush()
         val result = checkNotNull(input).readInt()
@@ -110,6 +120,7 @@ object BydStarterBridge {
     }
 
     private fun close() {
+        if (!GeelyVendorPolicy.bydDiagnostics) return
         try { socket?.close() } catch (_: Exception) { }
         socket = null; input = null; output = null
     }

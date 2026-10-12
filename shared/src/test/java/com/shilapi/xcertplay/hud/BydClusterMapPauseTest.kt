@@ -1,47 +1,38 @@
 package com.shilapi.xcertplay.hud
 
-import org.junit.After
-import org.junit.Assert.assertTrue
+import android.content.Context
+import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
-import kotlin.concurrent.thread
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], manifest = Config.NONE)
 class BydClusterMapPauseTest {
-    private val context get() = RuntimeEnvironment.getApplication()
-    private val release = CountDownLatch(1)
-
-    @After
-    fun tearDown() {
-        release.countDown()
-        BydClusterMapPause.streamControl = null
-        BydClusterMapPause.clusterMapShown = false
-    }
-
-    @Test
-    fun initializationDoesNotWaitForAPendingAdbRead() {
-        val reading = CountDownLatch(1)
-        // An adbd that accepted the read and has not answered yet.
-        BydClusterMapPause.readMode = {
-            reading.countDown()
-            release.await()
-            null
-        }
-        BydOutputSettings.setClusterStreamPause(context, true)
+    @Test fun forgedPauseAndModeFollowingCannotStartReadsOrCallbacks() {
+        val app = RuntimeEnvironment.getApplication()
+        val prefs = app.getSharedPreferences("diplay_byd_outputs", Context.MODE_PRIVATE)
+        prefs.edit().putBoolean("cluster_stream_pause", true).commit()
+        val original = BydClusterMapPause.readMode
+        BydClusterMapPause.readMode = { error("No vendor mode read is authorized") }
+        BydClusterMapPause.streamControl = { error("No vendor stream callback is authorized") }
+        BydClusterMapPause.onNaviMode = { error("No vendor mode callback is authorized") }
         BydClusterMapPause.clusterMapShown = true
-        BydClusterMapPause.streamControl = {}
-        BydClusterMapPause.initialize(context)
-        assertTrue("the ticker should start reading", reading.await(5, TimeUnit.SECONDS))
-
-        val initialized = CountDownLatch(1)
-        thread { BydClusterMapPause.initialize(context); initialized.countDown() }
-
-        assertTrue("initialize() waited for the adb read", initialized.await(1, TimeUnit.SECONDS))
+        try {
+            repeat(3) {
+                BydClusterMapPause.initialize(app)
+                BydClusterMapPause.javaClass.getDeclaredMethod("tick").apply { isAccessible = true }.invoke(BydClusterMapPause)
+            }
+            assertFalse(BydOutputSettings.clusterStreamPause(app))
+            assertNull(BydClusterMapPause.lastNaviMode)
+        } finally {
+            prefs.edit().clear().commit()
+            BydClusterMapPause.readMode = original
+            BydClusterMapPause.streamControl = null
+            BydClusterMapPause.onNaviMode = null
+            BydClusterMapPause.clusterMapShown = false
+        }
     }
 }

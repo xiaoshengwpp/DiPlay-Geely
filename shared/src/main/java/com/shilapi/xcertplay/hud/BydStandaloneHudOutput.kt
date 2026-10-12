@@ -12,6 +12,7 @@ import java.security.MessageDigest
 
 /** Ordinary-app IPC to the real stock receiver. No shell, local socket or permission grant. */
 internal class BydStandaloneHudOutput private constructor(context: Context) {
+    init { check(GeelyVendorPolicy.bydNavigation) { "BYD HUD disabled for this vehicle" } }
     private val app = context.applicationContext
     private val prefs = app.getSharedPreferences("byd_standalone_hud", Context.MODE_PRIVATE)
     private val session = BydStandaloneSession(
@@ -33,8 +34,9 @@ internal class BydStandaloneHudOutput private constructor(context: Context) {
     }
 
     fun update(icon: Int, exit: Int, distanceMeters: Int, road: String) =
-        session.update(icon, exit, distanceMeters, road)
-    fun clear() = session.clear()
+        if (GeelyVendorPolicy.bydNavigation) session.update(icon, exit, distanceMeters, road) else Unit
+    fun showText(text: String) { if (GeelyVendorPolicy.bydClusterSong) session.showText(text) }
+    fun clear() { if (GeelyVendorPolicy.bydNavigation) session.clear() }
 
     companion object {
         private const val TAG = "BYD-Standalone-Live"
@@ -44,9 +46,32 @@ internal class BydStandaloneHudOutput private constructor(context: Context) {
         fun create(context: Context): BydStandaloneHudOutput? =
             if (available(context)) BydStandaloneHudOutput(context) else null
 
+        fun diagnostics(context: Context): String = buildString {
+            if (!GeelyVendorPolicy.bydDiagnostics) {
+                append("BYD HUD disabled for ${GeelyVendorPolicy.PROFILE}")
+                return@buildString
+            }
+            appendLine("standaloneHudAvailable=${available(context)} sdk=${Build.VERSION.SDK_INT}")
+            appendLine("firmware=${Build.FINGERPRINT}")
+            // The receiver only exists on the inspected Android 13 firmware; signingInfo needs API 28.
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return@buildString
+            runCatching {
+                val info = context.packageManager.getPackageInfo(TARGET.packageName, PackageManager.GET_SIGNING_CERTIFICATES)
+                val receiver = context.packageManager.getReceiverInfo(TARGET, 0)
+                appendLine("receiver=${TARGET.flattenToString()} version=${info.longVersionCode} system=${(info.applicationInfo?.flags?.and(ApplicationInfo.FLAG_SYSTEM) ?: 0) != 0}")
+                appendLine("receiverEnabled=${receiver.enabled} exported=${receiver.exported} permission=${receiver.permission}")
+                info.signingInfo?.apkContentsSigners?.forEach { signer ->
+                    appendLine("signerSha256=" + MessageDigest.getInstance("SHA-256").digest(signer.toByteArray())
+                        .joinToString("") { "%02x".format(it.toInt() and 255) })
+                }
+            }.onFailure { appendLine("receiverMetadataUnavailable=${it.javaClass.simpleName}") }
+        }
+
         /** Enable production and diagnostic packages only on the physically tested firmware. */
         fun available(context: Context): Boolean {
-            if (Build.VERSION.SDK_INT < 28 || context.packageName !in setOf(
+        if (!GeelyVendorPolicy.bydNavigation) return false
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return false
+            if (context.packageName !in setOf(
                     "com.andrerinas.headunitrevived", "com.shihab.diplay",
                     "com.andrerinas.headunitrevived.bydhudtest", "com.shihab.diplay.hudtest")) return false
             if (Build.FINGERPRINT != "BYD-AUTO/IVI/IVI:13/TP1A.220624.014/eng.build20260722.221155:user/release-keys") return false

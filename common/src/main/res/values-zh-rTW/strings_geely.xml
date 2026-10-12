@@ -1,0 +1,5 @@
+<resources>
+    <string name="byd_integration_disabled_geely">此吉利實驗性版本已停用 BYD 車輛專屬功能。</string>
+    <string name="geely_navigation_audio_retained">保留原有導航音訊設定</string>
+    <string name="geely_upstream_update_disabled">此吉利實驗性建置已停用官方上游 APK 更新，以保留吉利車輛功能的安全限制。</string>
+</resources>

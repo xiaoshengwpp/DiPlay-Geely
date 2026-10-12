@@ -1,5 +1,7 @@
 package com.shilapi.xcertplay
 
+import com.shilapi.xcertplay.hud.GeelyVendorPolicy
+
 import android.content.Context
 import android.os.Build
 import com.shilapi.xcertplay.airplay.AirPlayDisplayConfig
@@ -40,7 +42,7 @@ internal object DiLink51ClusterLayout {
     fun saveTheme(context: Context, theme: Theme) {
         context.getSharedPreferences(PREFS, 0).edit().putString("theme", theme.name).apply()
     }
-    fun automatic(context: Context): Boolean = supported() && context.getSharedPreferences(PREFS, 0).getBoolean("automatic", false)
+    fun automatic(context: Context): Boolean = GeelyVendorPolicy.bydCluster && supported() && context.getSharedPreferences(PREFS, 0).getBoolean("automatic", false)
     fun saveAutomatic(context: Context, enabled: Boolean) {
         context.getSharedPreferences(PREFS, 0).edit().putBoolean("automatic", enabled).apply()
     }

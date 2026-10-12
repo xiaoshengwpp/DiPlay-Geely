@@ -22,6 +22,26 @@ data class AirPlayDisplayConfig(
     val initialUrl: String? = null,
     /** Display feature bits; null keeps the main-screen default (high-fidelity touch and knobs). */
     val features: Int? = null,
+    /**
+     * The view areas CarPlay may use on this display, or null for the whole display as one area. With
+     * several, the car moves CarPlay between them with updateViewArea, without reconnecting.
+     */
+    val viewAreas: List<AirPlayViewArea>? = null,
+    /** The area CarPlay starts in, an index into [viewAreas]. */
+    val initialViewArea: Int = 0,
+)
+
+/**
+ * A rectangle of the display's stream that CarPlay can draw in, and optionally the edge for its dock
+ * ([AirPlayInfoPlist.DOCK_EDGE_DRIVER_SIDE] or [AirPlayInfoPlist.DOCK_EDGE_BOTTOM]; null leaves it to
+ * the iPhone).
+ */
+data class AirPlayViewArea(
+    val width: Int,
+    val height: Int,
+    val originX: Int = 0,
+    val originY: Int = 0,
+    val dockEdge: Int? = null,
 )
 
 /** One OEM homescreen icon. */
@@ -45,8 +65,25 @@ data class AirPlayConfig(
     val hevc: Boolean = false,
     val disableAudioOutput: Boolean = false,
     val microphone: Boolean = false,
+    /**
+     * Whether to offer Opus alongside PCM for the microphone. Both platform and bundled software
+     * encoding count toward [com.shilapi.xcertplay.media.OpusEncoderSupport]; an older Android
+     * version or absent MediaCodec encoder alone must not remove the wireless Opus formats.
+     */
+    val microphoneOpus: Boolean = true,
     val manufacturer: String = "xcertplay",
     val model: String = "xcertplay",
     val oemLabel: String = "xcertplay",
     val icons: List<AirPlayIcon> = emptyList(),
+    /** iOS 27 video in car (see [VideoInCar]); video plays only while [VideoInCar.allowed]. */
+    val videoInCar: Boolean = false,
+    /**
+     * CarPlay's main buffered audio (see [BufferedAudioStream]): apps that support it send music
+     * ahead of time over TCP, so short Wi-Fi gaps do not interrupt it.
+     */
+    val mainBufferedAudio: Boolean = false,
 )
+
+/** The offer, SETUP and controls must all honor the user's audio-output setting. */
+internal val AirPlayConfig.bufferedAudioOutputEnabled: Boolean
+    get() = mainBufferedAudio && !disableAudioOutput

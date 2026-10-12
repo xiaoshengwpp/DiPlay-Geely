@@ -1,49 +1,36 @@
 package com.shilapi.xcertplay.hud
 
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertNull
-import org.junit.Assert.assertTrue
+import org.junit.Assert.*
 import org.junit.Test
 
+/** The Geely product keeps pure conversion coverage but cannot read a BYD traction battery. */
 class BydBatteryTest {
-    // Replies from the car on 2026-09-28: 25 %, 150 km, 25.1 kWh left, not charging (BMS state 15).
-    private val car = mapOf(
-        "1246777400" to "Result: Parcel(00000000 41c80000   '.......A')",
-        "1246765118" to "Result: Parcel(00000000 00000096   '........')",
-        "882901008" to "Result: Parcel(00000000 41c8cccd   '.......A')",
-        "876609560" to "Result: Parcel(00000000 0000000f   '........')",
-    )
-
-    private fun shell(replies: Map<String, String>): (String) -> String? = { command ->
-        replies.entries.firstOrNull { command.endsWith(" ${it.key}") }?.value
+    @Test fun geelyDoesNotProbeEvenAValidBydProtocol() {
+        val commands = mutableListOf<String>()
+        for (protocol in listOf("CAN", "CANFD", "UNKNOWN", "")) {
+            assertNull(BydBattery.read { commands += it; protocol })
+        }
+        assertTrue(commands.isEmpty())
     }
 
-    @Test
-    fun readsTheCarsReplies() {
-        val reading = BydBattery.read(shell(car))!!
-
-        assertEquals(25.0, reading.percent, 0.001)
-        assertEquals(150, reading.rangeKm)
-        assertEquals(25.1, reading.remainingKwh, 0.001)
-        assertFalse(reading.charging)
+    @Test fun geelyDoesNotInvokeAnUnavailableOrThrowingShell() {
+        repeat(3) { assertNull(BydBattery.read { error("No BYD read is authorized") }) }
     }
 
-    @Test
-    fun noAdbAccessGivesNoReading() {
-        // BydAdbShell answers null while adbd is off, refuses DiPlay's key or waits for approval.
-        assertNull(BydBattery.read { null })
-    }
-
-    @Test
-    fun aMissingOrRejectedValueGivesNoReading() {
-        assertNull(BydBattery.read(shell(car - "1246765118")))
-        assertNull(BydBattery.read(shell(car + ("1246777400" to "Result: Parcel(ffffd8e5    '....')"))))
+    @Test fun pureCanSnapshotDoesNotInventUnverifiedEnergy() {
+        val reading = BydBatteryReading(51.0, 36, null, true, BydBatteryProtocol.CAN)
+        assertNull(BydBattery.fullKwh(reading))
+        val snapshot = BydBattery.snapshot(reading, 20, null)
+        assertNull(snapshot.currentChargeWh)
+        assertNull(snapshot.maxChargeWh)
+        assertEquals(51.0, snapshot.batteryPercent, 0.001)
+        assertEquals(36, snapshot.rangeKm)
+        assertTrue(snapshot.charging)
     }
 
     @Test
     fun theIphoneGetsWattHoursAndAWarningAtTheThreshold() {
-        val reading = BydBatteryReading(percent = 25.0, rangeKm = 150, remainingKwh = 25.1, charging = false)
+        val reading = BydBatteryReading(percent = 25.0, rangeKm = 150, remainingKwh = 25.1, charging = false, protocol = BydBatteryProtocol.CANFD)
 
         val above = BydBattery.snapshot(reading, lowPercent = 20, fullKwh = null)
         assertFalse(above.rangeWarning)
@@ -56,8 +43,8 @@ class BydBatteryTest {
 
     @Test
     fun aLowChargeKeepsTheEarlierFullChargeEstimate() {
-        val high = BydBatteryReading(percent = 80.0, rangeKm = 480, remainingKwh = 80.0, charging = false)
-        val low = BydBatteryReading(percent = 5.0, rangeKm = 30, remainingKwh = 5.6, charging = false)
+        val high = BydBatteryReading(percent = 80.0, rangeKm = 480, remainingKwh = 80.0, charging = false, protocol = BydBatteryProtocol.CANFD)
+        val low = BydBatteryReading(percent = 5.0, rangeKm = 30, remainingKwh = 5.6, charging = false, protocol = BydBatteryProtocol.CANFD)
 
         assertNull(BydBattery.fullKwh(low))
         assertEquals(100_000L, BydBattery.snapshot(low, lowPercent = 20, fullKwh = BydBattery.fullKwh(high)).maxChargeWh)
