@@ -48,7 +48,36 @@
 
 流水线将 Base64 还原到临时文件，然后设置 Gradle 要求的 `ANDROID_KEYSTORE_PATH`，因此无需你填写 runner 上不存在的路径。另三项直接对应 Gradle 环境变量。运行时目录由流程设置为 `DIPLAY_AUTH_ASSETS_DIR`，严格位于源码之外。
 
-如果你还没有可继续使用的稳定签名库，这一步仍是阻塞项；本方案不会替你生成、保存或选择身份。不要使用 CN 公共签名库。务必自行保留原签名库和密码，后续同包名升级需要同一签名。
+如果你已有这个包名使用过的稳定签名库，应继续用原来的；不要为了这次构建重新生成。不要使用 CN 公共签名库或旧的 HUD/debug 测试签名。
+
+#### 首次发布且确实没有稳定签名库时
+
+下面只是供你本人操作的命令说明，助手不会执行。Android 发布签名只用于 APK 的开发者身份与后续升级连续性，**它不是 CarPlay 的实验性配件身份**，生成它也不能替代 APK 中的那两个运行时资产。
+
+你需要一个由你自己控制、已安装 JDK 的可信终端；已有的私有云终端也可以，不需要助手访问你的 Mac。这里没有替你开通任何云服务，也不假定你已有可用环境。若没有这样的终端，请先确定一个你愿意使用的环境；不要为赶进度把密钥交给公共在线生成器或随意新开付费环境。
+
+仅首次、由你本人在该可信终端运行（示例使用 Linux shell）：
+
+```sh
+umask 077
+mkdir -m 700 diplay-signing-private
+cd diplay-signing-private
+keytool -genkeypair -keystore diplay-geely-release.p12 -storetype PKCS12 \
+  -alias diplay-geely-release -keyalg RSA -keysize 3072 -validity 10000
+```
+
+`keytool` 会交互询问密码与证书信息。你本人输入，不要把密码作为命令行参数，也不要发送到聊天或 CI 日志。该示例使用 PKCS12，alias 密码与库密码设为同一个；在 Secrets 中 `ANDROID_KEYSTORE_PASSWORD` 与 `ANDROID_KEY_PASSWORD` 填相同的自选密码，`ANDROID_KEY_ALIAS` 填 `diplay-geely-release`。不要再次运行命令覆盖或替换已有签名。
+
+随后仍由你本人运行：
+
+```sh
+base64 -w 0 diplay-geely-release.p12 > owner-keystore.b64
+keytool -list -v -keystore diplay-geely-release.p12 -alias diplay-geely-release
+```
+
+第一行适用于 GNU/Linux，将文件编码到当前私有目录，不会在终端打印私钥。用你可信环境的安全文件查看/复制功能，把 `owner-keystore.b64` 的完整内容填入 `OWNER_ANDROID_KEYSTORE_BASE64`；不要上传它到 GitHub 文件、Actions artifact、gist 或 issue。第二行会询问库密码并显示公开证书 SHA-256 指纹，请自行保存该公指纹，未来对照构建 manifest。
+
+你本人将原 `.p12` 和密码安全备份到自己控制的安全存储，验证备份可用后清理临时编码副本与不再使用的临时环境。不要仅依赖 GitHub Secrets 作备份：它不是可随时取回原密钥的文件保险箱。丢失签名将影响同包名后续升级。若终端或安全备份尚不可用，签名准备仍未完成，先不要 Run workflow。
 
 ### 2. 启用并审查后，你本人点击 Run workflow
 
