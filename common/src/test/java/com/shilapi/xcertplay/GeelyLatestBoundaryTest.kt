@@ -132,9 +132,9 @@ class GeelyLatestBoundaryTest {
         assertNotNull(InterfaceSize.override(screen, InterfaceSize.preference(context)))
     }
 
-    @Test fun freshLanguageIsSimplifiedChineseAndSavedSystemFollowIsPreserved() {
+    @Test fun freshLanguageFollowsSystemAndSavedChoicesArePreserved() {
         context.getSharedPreferences("diplay", Context.MODE_PRIVATE).edit().clear().commit()
-        assertEquals(AppLocale.SIMPLIFIED_CHINESE, AppLocale.preference(context))
+        assertEquals(AppLocale.SYSTEM, AppLocale.preference(context))
         AppLocale.save(context, AppLocale.SYSTEM)
         assertEquals(AppLocale.SYSTEM, AppLocale.preference(context))
         assertSame(context, AppLocale.wrap(context))
@@ -142,12 +142,12 @@ class GeelyLatestBoundaryTest {
         assertEquals(AppLocale.ENGLISH, AppLocale.preference(context))
     }
 
-    @Test @Config(sdk = [33]) fun android13ChineseDefaultMigratesOnlyOnce() {
+    @Test @Config(sdk = [33]) fun android13FreshInstallDoesNotCreateALanguageOverride() {
         val manager = context.getSystemService(android.app.LocaleManager::class.java)
         context.getSharedPreferences("diplay", Context.MODE_PRIVATE).edit().clear().commit()
         manager.applicationLocales = android.os.LocaleList.getEmptyLocaleList()
-        assertEquals(AppLocale.SIMPLIFIED_CHINESE, AppLocale.preference(context))
-        assertEquals("zh-CN", manager.applicationLocales.toLanguageTags())
+        assertEquals(AppLocale.SYSTEM, AppLocale.preference(context))
+        assertTrue(manager.applicationLocales.isEmpty)
         AppLocale.save(context, AppLocale.SYSTEM)
         AppLocale.wrap(context)
         assertEquals(AppLocale.SYSTEM, AppLocale.preference(context))

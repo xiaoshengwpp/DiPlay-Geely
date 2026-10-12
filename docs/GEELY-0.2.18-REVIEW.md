@@ -13,7 +13,7 @@ The review branch is based on PR #7 and must not be merged or published by this 
 
 ## Preserved product behavior
 
-- Simplified Chinese on a new installation; existing English, traditional Chinese, system and other language choices retained. Official AppLocale did not change between 0.2.16 and 0.2.18; the fork implementation remains intact.
+- New installations follow the official upstream system-language default, including Chinese resources on Chinese systems; existing English, simplified/traditional Chinese, system and other saved choices are retained. The earlier fork-only forced Chinese default has been removed. Existing Android 13+ platform Chinese choices are left intact because prior automatic defaults cannot be distinguished from explicit choices.
 - Nullable navigation-channel override, explicit channel zero and legacy audio stream choices remain separate.
 - GPS sharing stays opt-in; startup/resume does not request GPS sharing permission.
 - Full-sensor orientation, 100% interface default, three ABIs and distinct Geely/debug application labels remain.

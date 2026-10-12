@@ -41,7 +41,8 @@ class Geely0216UiBoundaryTest(unittest.TestCase):
 
     def test_locale_default_does_not_remove_upstream_enforcement_or_saved_choices(self):
         source = self.source('AppLocale.kt')
-        self.assertIn('getString(KEY_LANGUAGE, SIMPLIFIED_CHINESE)', source)
+        self.assertEqual(2, source.count('getString(KEY_LANGUAGE, SYSTEM)'))
+        self.assertNotIn('getString(KEY_LANGUAGE, SIMPLIFIED_CHINESE)', source)
         self.assertIn('fun enforce(context: Context): Boolean', source)
         self.assertIn('if (prefs.getBoolean(KEY_MIGRATED, false)) return', source)
         self.assertIn('if (manager.applicationLocales.isEmpty && previous != null)', source)

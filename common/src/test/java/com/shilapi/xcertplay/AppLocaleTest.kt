@@ -19,6 +19,35 @@ class AppLocaleTest {
     private val context get() = RuntimeEnvironment.getApplication()
     private val manager get() = context.getSystemService(LocaleManager::class.java)
 
+    @Test @Config(sdk = [28, 32, 33])
+    fun freshInstallFollowsSystemWithoutWritingChinese() {
+        val prefs = context.getSharedPreferences("diplay", Context.MODE_PRIVATE)
+        prefs.edit().clear().commit()
+        assertEquals(AppLocale.SYSTEM, AppLocale.preference(context))
+        assertSame(context, AppLocale.wrap(context))
+        assertFalse(prefs.contains("app_language"))
+    }
+
+    @Test fun existingPlatformChineseIsPreservedEvenAfterEarlierDefaultMigration() {
+        context.getSharedPreferences("diplay", Context.MODE_PRIVATE).edit()
+            .putBoolean("app_language_platform_migrated", true).commit()
+        // A previous automatic default cannot be distinguished from an explicit choice.
+        manager.applicationLocales = LocaleList.forLanguageTags("zh-CN")
+        repeat(2) {
+            AppLocale.wrap(context)
+            assertEquals("zh-CN", manager.applicationLocales.toLanguageTags())
+            assertEquals(AppLocale.SIMPLIFIED_CHINESE, AppLocale.preference(context))
+        }
+    }
+
+    @Test fun legacySimplifiedChineseChoiceStillMigrates() {
+        context.getSharedPreferences("diplay", Context.MODE_PRIVATE).edit()
+            .putString("app_language", AppLocale.SIMPLIFIED_CHINESE).commit()
+        AppLocale.wrap(context)
+        assertEquals("zh-CN", manager.applicationLocales.toLanguageTags())
+        assertEquals(AppLocale.SIMPLIFIED_CHINESE, AppLocale.preference(context))
+    }
+
     @Test fun pickerAndSystemSettingsShareTheSamePreference() {
         AppLocale.save(context, AppLocale.ARABIC)
         assertEquals("ar", manager.applicationLocales.toLanguageTags())

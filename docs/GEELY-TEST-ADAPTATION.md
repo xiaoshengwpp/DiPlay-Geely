@@ -4,7 +4,7 @@ The baseline is the complete official 0.2.16 source. Disabling vendor features c
 
 The first aggregate results are preserved separately: shared 1,183 tests / 10 failures; common 1,053 / 374 failures; home 4 / 0 failures. Of the common failures, 188 explicitly reported Mockito startup instrumentation failure and 186 required per-case product/locale/assertion review. The JDK 25 startup-agent fix was verified separately by the five previously failing USB/event-socket tests.
 
-Pure protocol, packet, parsing, routing, rendering and planner suites remain. UI tests with English text selectors now select English explicitly, because the actual product fresh-install default is Chinese. Disabled-feature tests call real product entry points and verify no backend, key, setting, callback or IPC side effects, including forged persisted state.
+Pure protocol, packet, parsing, routing, rendering and planner suites remain. UI tests with English text selectors select English explicitly, so they remain independent of the system locale. Fresh installs follow the upstream system-language default; saved language choices are preserved. Disabled-feature tests call real product entry points and verify no backend, key, setting, callback or IPC side effects, including forged persisted state.
 
 ## Method-count differences
 
