@@ -48,7 +48,7 @@ object AppLocale {
             }
         }
         return context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
-            .getString(KEY_LANGUAGE, SIMPLIFIED_CHINESE)?.takeIf { it in ALL } ?: SYSTEM
+            .getString(KEY_LANGUAGE, SYSTEM)?.takeIf { it in ALL } ?: SYSTEM
     }
 
     fun save(context: Context, language: String) {
@@ -96,13 +96,13 @@ object AppLocale {
         return true
     }
 
-    // Default only once; preserve explicit system-follow and Android Settings choices.
+    // Migrate saved choices only; new installs follow the system, as upstream does.
     private fun migrateToPlatform(context: Context) {
         if (Build.VERSION.SDK_INT < 33) return
         val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
         if (prefs.getBoolean(KEY_MIGRATED, false)) return
         val manager = context.getSystemService(LocaleManager::class.java)
-        val previous = locale(prefs.getString(KEY_LANGUAGE, SIMPLIFIED_CHINESE) ?: SYSTEM)
+        val previous = locale(prefs.getString(KEY_LANGUAGE, SYSTEM) ?: SYSTEM)
         if (manager.applicationLocales.isEmpty && previous != null) {
             manager.applicationLocales = LocaleList(previous)
         }

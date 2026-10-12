@@ -4,7 +4,7 @@
 
 吉利问题请到[本仓库 Issues](https://github.com/xiaoshengwpp/DiPlay-Geely/issues/new/choose)，并先阅读[日志导出与隐私指南](README.md#问题反馈与兼容性共建)。未来可安装版本统一从[本仓库普通 GitHub Releases](https://github.com/xiaoshengwpp/DiPlay-Geely/releases)提供；源码 CI 产物不可当作安装包。
 
-以已验证吉利 0.2.16 基线整合官方完整 `v0.2.18` 差异（`e8d23603ccf5aa9c32ad5c999656c5fb492c83e6`），并保留吉利安全边界：禁用比亚迪/DiLink 车辆写入、仪表地图共享、驻车视频、自动 ADB/权限修改和官方原版 APK 安装；新安装默认简体中文，保留已保存语言及音频路由。尚未完成星越 L 实车验证。
+以已验证吉利 0.2.16 基线整合官方完整 `v0.2.18` 差异（`e8d23603ccf5aa9c32ad5c999656c5fb492c83e6`），并保留吉利安全边界：禁用比亚迪/DiLink 车辆写入、仪表地图共享、驻车视频、自动 ADB/权限修改和官方原版 APK 安装；语言默认行为沿用官方上游（跟随系统，中文系统使用对应中文资源），保留已保存语言及音频路由。尚未完成星越 L 实车验证。
 
 见[集成与验证记录](docs/GEELY-0.2.18-REVIEW.md)及[构建指南](docs/BUILD.md)。无认证、未签名的源码验证 APK 不是可交付的完整版 CarPlay 安装包。下方保留的上游说明用于参考，其中比亚迪专属功能在本吉利版本中禁用。
 

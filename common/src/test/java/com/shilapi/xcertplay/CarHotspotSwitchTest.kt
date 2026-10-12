@@ -38,12 +38,14 @@ import org.robolectric.shadows.ShadowToast
 class CarHotspotSwitchTest {
     private lateinit var activity: DiPlayActivity
     private lateinit var controls: LinearLayout
+    private var hotspotBeforeResume: Map<String, *> = emptyMap<String, Any?>()
 
     @Before fun setUp() {
         val app = RuntimeEnvironment.getApplication()
         for (name in listOf("diplay_byd_outputs", "diplay_byd_vehicle_fields", "diplay_car_hotspot", "xcertplay_airplay", "diplay")) {
             app.getSharedPreferences(name, 0).edit().clear().commit()
         }
+        AppLocale.save(app, AppLocale.SYSTEM)
         BydVehicleFieldStore.clearMemoryForTests()
         CarPlayBackgroundSession.clear()
         CarHotspotAdbGrantTest.WritePermission.allowed = false
@@ -176,7 +178,7 @@ class CarHotspotSwitchTest {
         prepareResume()
         lifecycle("onPause")
         lifecycle("onResume")
-        assertSame(controls, activity.findViewById<ViewGroup>(android.R.id.content).getChildAt(0))
+        assertSettingsPageWithoutAuthorization()
         assertTrue(StatusCheck.workers.isEmpty())
         requestDenied(CarHotspotSetup.Permission.HOTSPOT)
         lifecycle("onPause")
@@ -187,10 +189,25 @@ class CarHotspotSwitchTest {
         lifecycle("onPause")
         requestDenied(CarHotspotSetup.Permission.HOTSPOT)
         lifecycle("onResume")
-        assertSame(controls, activity.findViewById<ViewGroup>(android.R.id.content).getChildAt(0))
+        assertSettingsPageWithoutAuthorization()
         assertTrue(StatusCheck.workers.isEmpty())
         assertNull(Grant.worker)
         lifecycle("onPause")
+    }
+
+    /** Resume may redraw the same page; view identity is not navigation state. */
+    private fun assertSettingsPageWithoutAuthorization() {
+        val page = DiPlayActivity::class.java.getDeclaredField("page").apply { isAccessible = true }.get(activity)
+        assertEquals("settings", page)
+        assertNotNull(activity.findViewById<ViewGroup>(android.R.id.content).getChildAt(0))
+        assertFalse(CarHotspotSettings.enabled(activity))
+        assertEquals(hotspotBeforeResume, activity.getSharedPreferences("diplay_car_hotspot", 0).all)
+        assertFalse(AirPlayPersistence.loadAutoStartOnBoot(activity))
+        assertFalse(CarPlayBackgroundSession.hasSession())
+        assertEquals(AppLocale.SYSTEM, AppLocale.preference(activity))
+        assertFalse(activity.isChangingConfigurations)
+        assertTrue(Grant.requested.isEmpty())
+        assertNull(Grant.worker)
     }
 
     /** A stale UI listener is denied before permission work or the preference-save callback. */
@@ -212,6 +229,14 @@ class CarHotspotSwitchTest {
     }
 
     private fun prepareResume() {
+        // This focused fixture intentionally skips onCreate; initialize the locale snapshot it owns.
+        // Otherwise the old forced-Chinese default caused an unrelated recreate/early return and
+        // accidentally hid the legitimate same-page redraw later in onResume.
+        DiPlayActivity::class.java.getDeclaredField("languagePreferenceAtCreate").apply {
+            isAccessible = true
+        }.set(activity, AppLocale.preference(activity))
+        hotspotBeforeResume = activity.getSharedPreferences("diplay_car_hotspot", 0).all.toMap()
+
         for ((name, value) in mapOf("initialLaunch" to false, "page" to "settings")) {
             DiPlayActivity::class.java.getDeclaredField(name).apply { isAccessible = true }.set(activity, value)
         }

@@ -70,10 +70,10 @@ class Geely0218IntegrationTest(unittest.TestCase):
         policy = (SHARED / 'hud/GeelyVendorPolicy.kt').read_text()
         self.assertIn('val foregroundMediaKeys: Boolean = false', policy)
 
-    def test_language_implementation_is_the_verified_fork_blob(self):
-        # AppLocale did not change in official 0.2.16 -> 0.2.18. Keep the fork migration intact.
+    def test_language_implementation_matches_reviewed_system_default_blob(self):
+        # Restore upstream SYSTEM defaults while retaining saved-choice migration and script detection.
         data = (COMMON / 'AppLocale.kt').read_bytes()
-        expected = 'dc18198b2f4621fce18cd9cb74db8f4d75810089'
+        expected = 'c78b5212a25477bbaed72b984d926d8c621c7e88'
         actual = hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest()
         self.assertEqual(expected, actual)
 
