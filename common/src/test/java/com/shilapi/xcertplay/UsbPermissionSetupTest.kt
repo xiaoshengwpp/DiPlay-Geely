@@ -50,7 +50,7 @@ class UsbPermissionSetupTest {
     @Test fun unapprovedConnectionDoesNotRunAnyGrant() {
         val client = FakeClient().apply { access = LocalAdb.Access.NOT_APPROVED }
         val result = operation(client).run()
-        assertEquals(LocalAdb.Access.UNREACHABLE, result.access)
+        assertEquals(LocalAdb.Access.UNSUPPORTED, result.access)
         assertTrue(client.commands.isEmpty())
         assertFalse(result.complete)
         assertFalse(client.closed)
@@ -91,7 +91,7 @@ class UsbPermissionSetupTest {
             onCommand = { allowed += permissions[commands.size - 1] }
         }
         val result = operation(client) { it in allowed }.run()
-        assertEquals(LocalAdb.Access.UNREACHABLE, result.access)
+        assertEquals(LocalAdb.Access.UNSUPPORTED, result.access)
         assertFalse(result.complete)
         assertTrue(result.verified.isEmpty())
         assertTrue(client.commands.isEmpty())
@@ -134,8 +134,7 @@ class UsbPermissionSetupTest {
         val target = "${context.packageName}/com.shilapi.xcertplay.UsbAutoConfirmService"
         for (initial in listOf("other.package/.Service", "other.package/.Service:$target", "null", "")) {
             val actual = runAccessibilityCommand(initial)
-            val expected = if (initial.isBlank() || initial == "null") target
-                else if (initial.contains(target)) initial else "$initial:$target"
+            val expected = "UNCHANGED"
             assertEquals(expected, actual.trim())
         }
     }
@@ -145,16 +144,11 @@ class UsbPermissionSetupTest {
         assertEquals("UNCHANGED", runAccessibilityCommand("Permission denied").trim())
     }
 
-    @Test fun manualCommandUsesTheSamePreservingGrantAndIncludesOverlay() {
-        val command = UsbPermissionSetup.manualCommand(context.packageName)
-        assertTrue(command.contains("settings get secure enabled_accessibility_services"))
-        assertTrue(command.contains("GET_USAGE_STATS allow"))
-        assertTrue(command.contains("SYSTEM_ALERT_WINDOW allow"))
-        // Execute the exact copied command using an adb shell fixture, including its outer quoting.
-        val target = "${context.packageName}/com.shilapi.xcertplay.UsbAutoConfirmService"
-        val script = shellFixture("other.package/.Service") +
-            "\nadb() { shift; eval \"\$1\"; }; $command; printf '%s' \"\$saved\""
-        assertEquals("other.package/.Service:$target", runShell(script).trim())
+    @Test fun manualCommandIsHarmlessAndNeverContainsPermissionWrites() {
+        assertEquals(":", UsbPermissionSetup.manualCommand(context.packageName))
+        for (permission in permissions) assertEquals(":", UsbPermissionSetup.command(permission, context.packageName))
+        val script = shellFixture("other.package/.Service") + "\n" + UsbPermissionSetup.manualCommand(context.packageName) + "; printf '%s' \"\$saved\""
+        assertEquals("UNCHANGED", runShell(script).trim())
     }
 
     @Test fun cancelWithoutAnAutomaticDialogCannotCreateAWorker() = refusedUiAttempt { activity ->

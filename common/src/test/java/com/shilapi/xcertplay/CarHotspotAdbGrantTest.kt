@@ -8,7 +8,7 @@ import java.io.InputStream
 import java.net.ServerSocket
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import java.security.KeyPairGenerator
+import java.security.KeyPair
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -29,7 +29,8 @@ import org.robolectric.shadows.ShadowSettings
 @Config(sdk = [29], manifest = Config.NONE, shadows = [CarHotspotAdbGrantTest.WritePermission::class])
 class CarHotspotAdbGrantTest {
     private val context get() = RuntimeEnvironment.getApplication()
-    private val key = KeyPairGenerator.getInstance("RSA").apply { initialize(2048) }.generateKeyPair()
+    // The disabled adapter must never inspect or use any key material.
+    private val key = KeyPair(null, null)
 
     @Before fun reset() {
         WritePermission.allowed = false
@@ -38,7 +39,7 @@ class CarHotspotAdbGrantTest {
 
     @Test fun unapprovedProbeDoesNotOfferTheKeyOrRunShellCommands() {
         FakeAdbd(knownKey = false).use { server ->
-            assertEquals(LocalAdb.Access.UNREACHABLE, CarHotspotSetup.check(context, server.client()))
+            assertEquals(LocalAdb.Access.UNSUPPORTED, CarHotspotSetup.check(context, server.client()))
             server.await()
             assertFalse(server.offeredKey)
             assertTrue(server.commands.isEmpty())
@@ -47,7 +48,7 @@ class CarHotspotAdbGrantTest {
 
     @Test fun knownKeyProbeStillDoesNotConnectOrGrantPermissions() {
         FakeAdbd().use { server ->
-            assertEquals(LocalAdb.Access.UNREACHABLE, CarHotspotSetup.check(context, server.client()))
+            assertEquals(LocalAdb.Access.UNSUPPORTED, CarHotspotSetup.check(context, server.client()))
             server.await()
             assertTrue(server.commands.isEmpty())
         }
@@ -55,7 +56,7 @@ class CarHotspotAdbGrantTest {
 
     @Test fun explicitHotspotGrantStillCannotOfferAKeyOrChangeWriteSettings() {
         FakeAdbd(knownKey = false, onCommand = { WritePermission.allowed = true }).use { server ->
-            assertEquals(LocalAdb.Access.UNREACHABLE,
+            assertEquals(LocalAdb.Access.UNSUPPORTED,
                 CarHotspotSetup.grant(context, listOf(CarHotspotSetup.Permission.HOTSPOT), server.client()))
             server.await()
             assertFalse(server.offeredKey)
@@ -67,7 +68,7 @@ class CarHotspotAdbGrantTest {
 
     @Test fun emptyShellOutputDoesNotImplyPermissionWasGranted() {
         FakeAdbd().use { server ->
-            assertEquals(LocalAdb.Access.UNREACHABLE,
+            assertEquals(LocalAdb.Access.UNSUPPORTED,
                 CarHotspotSetup.grant(context, listOf(CarHotspotSetup.Permission.HOTSPOT), server.client()))
             assertFalse(CarHotspotSetup.Permission.HOTSPOT.granted(context))
         }
@@ -95,7 +96,7 @@ class CarHotspotAdbGrantTest {
     @Test fun noApprovalWaitOrKeyOfferIsStartedInTheGeelyProfile() {
         val approval = CountDownLatch(1)
         FakeAdbd(knownKey = false, approval = approval, onCommand = { WritePermission.allowed = true }).use { server ->
-            assertEquals(LocalAdb.Access.UNREACHABLE,
+            assertEquals(LocalAdb.Access.UNSUPPORTED,
                 CarHotspotSetup.grant(context, listOf(CarHotspotSetup.Permission.HOTSPOT), server.client()))
             assertEquals(1L, server.keyOffered.count)
             assertTrue(server.commands.isEmpty())
@@ -106,7 +107,7 @@ class CarHotspotAdbGrantTest {
 
     @Test fun deniedKeyDoesNotRunAnyPermissionCommand() {
         FakeAdbd(knownKey = false, approveKey = false).use { server ->
-            assertEquals(LocalAdb.Access.UNREACHABLE, CarHotspotSetup.grant(context,
+            assertEquals(LocalAdb.Access.UNSUPPORTED, CarHotspotSetup.grant(context,
                 CarHotspotSetup.Permission.entries, server.client()))
             assertTrue(server.commands.isEmpty())
             assertFalse(WritePermission.allowed)
@@ -118,7 +119,7 @@ class CarHotspotAdbGrantTest {
             if ("WRITE_SETTINGS" in command) WritePermission.allowed = true
             if ("SYSTEM_ALERT_WINDOW" in command) ShadowSettings.setCanDrawOverlays(true)
         }).use { server ->
-            assertEquals(LocalAdb.Access.UNREACHABLE, CarHotspotSetup.grant(context,
+            assertEquals(LocalAdb.Access.UNSUPPORTED, CarHotspotSetup.grant(context,
                 CarHotspotSetup.Permission.entries, server.client()))
             assertTrue(server.commands.isEmpty())
             assertTrue(CarHotspotSetup.Permission.entries.none { it.granted(context) })
@@ -127,7 +128,7 @@ class CarHotspotAdbGrantTest {
 
     @Test fun ordinaryVehicleSwitchOnlyConnectsWithoutGrantingAppPermissions() {
         FakeAdbd(knownKey = false).use { server ->
-            assertEquals(LocalAdb.Access.UNREACHABLE, CarHotspotSetup.grant(context, emptyList(), server.client()))
+            assertEquals(LocalAdb.Access.UNSUPPORTED, CarHotspotSetup.grant(context, emptyList(), server.client()))
             assertFalse(server.offeredKey)
             assertTrue(server.commands.isEmpty())
         }

@@ -1,29 +1,20 @@
 package com.shilapi.xcertplay.network
 
-import android.os.Build
-import android.os.IBinder
 import android.os.Parcel
 import android.os.Parcelable
 
-/** Reflection is contained in a shell-UID app_process helper; ordinary app permission is insufficient. */
-internal class HotspotJoinPlatform(private val wifi: Any, private val api: Int,
+/** Inert platform port with offline configuration transforms and parcel codecs. */
+@Suppress("UNUSED_PARAMETER")
+internal class HotspotJoinPlatform(wifi: Any, private val api: Int,
     private val firmwareKey: String,
-    private val capability: () -> HotspotJoinCapability.Snapshot? = { HotspotJoinCapability.read(wifi) }) : HotspotJoinTransaction.Port<Any> {
-    private val configType = Class.forName("android.net.wifi.SoftApConfiguration")
-    private val builderType = Class.forName("android.net.wifi.SoftApConfiguration\$Builder")
-    private val elementType = Class.forName("android.net.wifi.ScanResult\$InformationElement")
-    private val getConfig = wifi.javaClass.getMethod("getSoftApConfiguration")
-    private val setConfig = wifi.javaClass.getMethod("setSoftApConfiguration", configType, String::class.java)
-    private val getState = wifi.javaClass.getMethod("getWifiApEnabledState")
-
+    private val capability: () -> HotspotJoinCapability.Snapshot? = { null }) : HotspotJoinTransaction.Port<Any> {
+    private val configType by lazy { Class.forName("android.net.wifi.SoftApConfiguration") }
+    private val builderType by lazy { Class.forName("android.net.wifi.SoftApConfiguration\$Builder") }
+    private val elementType by lazy { Class.forName("android.net.wifi.ScanResult\$InformationElement") }
     override fun firmware() = firmwareKey
-    override fun read(): Any = getConfig.invoke(wifi) ?: throw IllegalStateException()
-    override fun hotspotOff(): Boolean? = when (getState.invoke(wifi) as? Int) {
-        11 -> true
-        13 -> false
-        else -> null // Disabled only: do not treat starting/stopping/failed as safe to write.
-    }
-    override fun write(config: Any): Boolean = setConfig.invoke(wifi, config, "com.android.shell") == true
+    override fun read(): Any = throw UnsupportedOperationException("Hotspot repair is disabled")
+    override fun hotspotOff(): Boolean? = null
+    override fun write(config: Any): Boolean = false
 
     override fun repaired(config: Any): Any? {
         if (api < 33) return null
@@ -79,15 +70,6 @@ internal class HotspotJoinPlatform(private val wifi: Any, private val api: Int,
         }
     }
     companion object {
-        fun connect(): HotspotJoinPlatform {
-            require(Build.VERSION.SDK_INT >= 33)
-            val service = Class.forName("android.os.ServiceManager")
-                .getMethod("getService", String::class.java).invoke(null, "wifi") as IBinder
-            val wifi = Class.forName("android.net.wifi.IWifiManager\$Stub")
-                .getMethod("asInterface", IBinder::class.java).invoke(null, service) ?: throw IllegalStateException()
-            // Local journal never migrates between framework/vendor builds.
-            val firmware = HotspotJoinFirmware.current() ?: throw UnsupportedOperationException()
-            return HotspotJoinPlatform(wifi, Build.VERSION.SDK_INT, firmware)
-        }
+        fun connect(): HotspotJoinPlatform = throw UnsupportedOperationException("Hotspot repair is disabled")
     }
 }

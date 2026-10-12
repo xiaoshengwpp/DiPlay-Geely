@@ -1,6 +1,6 @@
-# Build DiPlay Geely 0.2.16
+# Build DiPlay Geely 0.2.18
 
-This fork starts from official tag `v0.2.16` (`bac419695ca26b7e67d204a279333ca52132c2cb`). Geely product changes are listed in [the integration review](GEELY-0.2.16-REVIEW.md). The official build entry remains `:mobile:assembleRelease`; this fork additionally refuses release builds without complete external authentication and signing inputs. No public GitHub release-upload workflow is supplied by the pinned official source.
+This review candidate integrates official tag `v0.2.18` (`e8d23603ccf5aa9c32ad5c999656c5fb492c83e6`) on the validated Geely 0.2.16 baseline. Geely product changes are listed in [the integration review](GEELY-0.2.18-REVIEW.md). The official build entry remains `:mobile:assembleRelease`; this fork additionally refuses release builds without complete external authentication and signing inputs. No public GitHub release-upload workflow is supplied by the pinned official source.
 
 Source-only validation outputs are unsigned and contain no accessory identity. They are not installable standalone CarPlay deliveries. Do not publish them as the finished Geely release.
 

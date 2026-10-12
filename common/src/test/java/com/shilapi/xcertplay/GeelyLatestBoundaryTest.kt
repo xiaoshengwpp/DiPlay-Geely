@@ -67,7 +67,7 @@ class GeelyLatestBoundaryTest {
         assertFalse(WheelKeyService.wanted(rejectingContext))
         assertFalse(WheelKeyService.needsRestore(rejectingContext))
         WheelKeyService.restoreIfNeeded(rejectingContext)
-        assertEquals(LocalAdb.Access.UNREACHABLE, WheelKeyService.enableOverAdb(rejectingContext))
+        assertEquals(LocalAdb.Access.UNSUPPORTED, WheelKeyService.enableOverAdb(rejectingContext))
         assertFalse(WheelKeyService.applyServiceSettings(rejectingContext, { error("shell called") }))
         val service = WheelKeyService()
         service.javaClass.getDeclaredMethod("onServiceConnected").apply { isAccessible = true }.invoke(service)
@@ -84,15 +84,15 @@ class GeelyLatestBoundaryTest {
         val result = UsbPermissionSetup.Operation(rejectingContext,
             factory = { error("ADB client constructed") }, granted = { error("permission inspected") }).run()
         assertFalse(result.complete)
-        assertEquals(LocalAdb.Access.UNREACHABLE, result.access)
+        assertEquals(LocalAdb.Access.UNSUPPORTED, result.access)
         assertTrue(result.verified.isEmpty())
     }
 
     @Test fun hotspotEntryPointsNeverCreateKeysOrChangePermissions() {
         assertFalse(CarHotspotSetup.isBydHeadUnit(rejectingContext))
         assertFalse(CarHotspotSetup.shouldStartOnLaunch(rejectingContext, false))
-        assertEquals(LocalAdb.Access.UNREACHABLE, CarHotspotSetup.check(rejectingContext))
-        assertEquals(LocalAdb.Access.UNREACHABLE,
+        assertEquals(LocalAdb.Access.UNSUPPORTED, CarHotspotSetup.check(rejectingContext))
+        assertEquals(LocalAdb.Access.UNSUPPORTED,
             CarHotspotSetup.grant(rejectingContext, CarHotspotSetup.Permission.entries))
     }
 

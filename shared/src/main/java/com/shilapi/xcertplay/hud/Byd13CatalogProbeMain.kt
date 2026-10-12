@@ -1,54 +1,10 @@
 package com.shilapi.xcertplay.hud
 
-import java.lang.reflect.Modifier
 
-/**
- * One-shot entry point launched under the head unit's shell uid with `app_process`. It reflects
- * only the six read fields DiPlay needs and their device ids, then exits. It performs no Binder
- * writes and does not register a persistent service.
- */
+/** No-op compatibility interface. This product has no live vehicle access implementation. */
 object Byd13CatalogProbeMain {
-    @JvmStatic
-    fun main(args: Array<String>) {
-        if (!GeelyVendorPolicy.bydDiagnostics) return
-        val wanted = buildSet {
-            for (field in BydVehicleField.entries) {
-                add(field.symbol)
-                addAll(field.symbolAliases)
-                add("BYDAutoConstants.BYDAUTO_DEVICE_${field.deviceName}")
-            }
-        }
-        println(HEADER)
-        for (rootName in ROOTS) {
-            val root = runCatching { Class.forName(rootName) }.getOrNull() ?: continue
-            scan(root, wanted, HashSet()).sorted().forEach(::println)
-        }
-    }
-
-    private fun scan(type: Class<*>, wanted: Set<String>, seen: MutableSet<String>): List<String> {
-        if (!seen.add(type.name)) return emptyList()
-        val prefix = type.simpleName.ifBlank { type.name.substringAfterLast('.') }
-        val lines = runCatching {
-            type.declaredFields.mapNotNull { field ->
-                val key = "$prefix.${field.name}"
-                if (key !in wanted || !Modifier.isStatic(field.modifiers) ||
-                    field.type != Int::class.javaPrimitiveType && field.type != Long::class.javaPrimitiveType) {
-                    return@mapNotNull null
-                }
-                field.isAccessible = true
-                "$key=${field.get(null)}"
-            }
-        }.getOrDefault(emptyList())
-        val nested = runCatching { type.declaredClasses.toList() }.getOrDefault(emptyList())
-            .flatMap { scan(it, wanted, seen) }
-        return lines + nested
-    }
-
     const val HEADER = "DIPLAY_BYD13_CATALOG_V1"
-    private val ROOTS = listOf(
-        "android.hardware.bydauto.BYDAutoFeatureIds",
-        "android.hardware.bydauto.BYDAutoConstants",
-    )
+    @JvmStatic fun main(args: Array<String>) = Unit
 }
 
 internal data class BydFirmwareCatalog(

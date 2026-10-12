@@ -78,8 +78,9 @@ class LocalAdbApprovalTest {
     }
 
     private fun assertNoTransport(adb: LocalAdb) {
-        for (name in listOf("socket", "input", "output")) {
-            assertNull(name, LocalAdb::class.java.getDeclaredField(name).apply { isAccessible = true }.get(adb))
+        val fields = adb.javaClass.declaredFields.map { it.name }
+        for (name in listOf("socket", "input", "output", "nextStreamId", "key", "host", "port")) {
+            assertFalse("Disabled ADB must not retain transport or credential state: $name", name in fields)
         }
     }
 }

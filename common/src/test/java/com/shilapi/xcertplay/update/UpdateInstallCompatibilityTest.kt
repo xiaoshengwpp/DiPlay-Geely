@@ -25,4 +25,13 @@ class UpdateInstallCompatibilityTest {
             .apply { isAccessible = true }.invoke(activity)
         assertNull(shadowOf(activity).nextStartedActivity)
     }
+
+    @Test fun directNewInstallerEntryAlsoStopsBeforeReadingThePublicCopy() {
+        val activity = Robolectric.buildActivity(DiPlayActivity::class.java).get()
+        val nonexistent = File(activity.cacheDir, "never-created.apk")
+        DiPlayActivity::class.java.getDeclaredMethod("startInstaller", File::class.java, android.net.Uri::class.java)
+            .apply { isAccessible = true }.invoke(activity, nonexistent, android.net.Uri.parse("content://invalid/no-access"))
+        assertNull(shadowOf(activity).nextStartedActivity)
+        org.junit.Assert.assertFalse(nonexistent.exists())
+    }
 }

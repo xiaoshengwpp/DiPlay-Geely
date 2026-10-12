@@ -1,49 +1,17 @@
+@file:Suppress("UNUSED_PARAMETER", "unused")
+
 package com.shilapi.xcertplay.hud
 
 import android.content.Context
-import android.os.SystemClock
-import android.util.Log
-import com.shilapi.xcertplay.adb.AdbKeys
 import com.shilapi.xcertplay.adb.LocalAdb
 
-/**
- * A lazily opened adb shell on the head unit for background reads. It never asks for approval, so
- * the car's dialog cannot appear while driving; a refused or missing adbd is retried every 30 s.
- */
+/** Compatibility API only. This product contains no live vendor backend. */
 internal class BydAdbShell(private val tag: String) {
-    private var adb: LocalAdb? = null
-    private var retryAtMillis = 0L
-    private var unavailableLogged = false
-
-    @Synchronized
-    fun run(context: Context, command: String): String? {
-        if (!GeelyVendorPolicy.bydAdb) return null
-        val now = SystemClock.elapsedRealtime()
-        if (now < retryAtMillis) return null
-        val client = adb ?: LocalAdb(AdbKeys.load(context)).also { adb = it }
-        val access = client.connect(mayAsk = false)
-        if (access != LocalAdb.Access.READY) {
-            retryAtMillis = now + RETRY_MILLIS
-            if (!unavailableLogged) {
-                unavailableLogged = true
-                Log.w(tag, "ADB access $access")
-            }
-            return null
-        }
-        unavailableLogged = false
-        return client.shell(command)
-    }
-
-    @Synchronized
-    fun close() {
-        if (!GeelyVendorPolicy.bydAdb) return
-        adb?.close()
-        adb = null
-    }
-
-    private companion object {
-        const val RETRY_MILLIS = 30_000L
-    }
+    @Volatile var lastAccess: LocalAdb.Access? = null
+        private set
+    @Synchronized fun run(context: Context, command: String): String? = null
+    @Synchronized fun run(context: Context, command: String, readTimeoutMillis: Int?): String? = null
+    @Synchronized fun close() = Unit
 }
 
 /** Reads `service call` replies such as `Result: Parcel(00000000 00000002 '........')`. */

@@ -1,20 +1,16 @@
 package com.shilapi.xcertplay.network
 
-import com.shilapi.xcertplay.hud.GeelyVendorPolicy
 import android.content.Context
-import android.net.ConnectivityManager
 import android.os.Bundle
 import android.os.ResultReceiver
-import android.provider.Settings
-import com.shilapi.xcertplay.adb.AdbKeys
-import com.shilapi.xcertplay.adb.LocalAdb
 import java.lang.reflect.InvocationTargetException
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.locks.ReentrantLock
 
-/** Uses the car's saved hotspot configuration. This never stops or reconfigures the hotspot. */
+/** Disabled platform adapter; injected startup policy helpers are retained for offline tests. */
+@Suppress("UNUSED_PARAMETER")
 object CarHotspotTethering {
     private val startupLock = ReentrantLock()
     enum class Result(val diagnostic: String) {
@@ -26,52 +22,15 @@ object CarHotspotTethering {
         CANCELLED("Hotspot startup was cancelled"),
     }
 
-    fun permitted(context: Context): Boolean = GeelyVendorPolicy.bydAdb && Settings.System.canWrite(context)
+    fun permitted(context: Context): Boolean = false
 
-    /** Blocking; serialize startup and connection requests, checking cancellation after acquiring the lock. */
+    /** Automatic hotspot control is unavailable and never accesses context or invokes callbacks. */
     fun enable(
         context: Context,
         isCancelled: () -> Boolean,
         timeoutMillis: Long = WirelessStartupPolicy.HOTSPOT_READY_MILLIS,
         log: (String) -> Unit,
-    ): Result {
-        if (!GeelyVendorPolicy.bydAdb) return Result.PERMISSION_REQUIRED
-        val deadline = System.nanoTime() + timeoutMillis * 1_000_000L
-        val observedAdbState = AtomicReference<Boolean?>()
-        val startReflection: (ResultReceiver) -> Unit = { receiver ->
-            val service = ConnectivityManager::class.java.getDeclaredField("mService")
-                .apply { isAccessible = true }
-                .get(context.getSystemService(ConnectivityManager::class.java))
-                ?: throw NoSuchMethodException("Connectivity service unavailable")
-            service.javaClass.getMethod(
-                "startTethering", Int::class.javaPrimitiveType, ResultReceiver::class.java,
-                Boolean::class.javaPrimitiveType, String::class.java,
-            ).invoke(service, 0, receiver, false, context.packageName)
-        }
-        val startAdb: () -> Boolean = {
-            val client = AtomicReference<LocalAdb?>()
-            CarHotspotAdbFallback.bounded(deadline, isCancelled,
-                abort = { client.get()?.cancelPendingOperations() }) {
-                val adb = LocalAdb(AdbKeys.load(context))
-                client.set(adb)
-                adb.use {
-                    if (isCancelled() || Thread.currentThread().isInterrupted || System.nanoTime() >= deadline) false
-                    else if (adb.connect(mayAsk = false) != LocalAdb.Access.READY) false
-                    else CarHotspotAdbFallback.start(deadline, isCancelled,
-                        state = { CarHotspotStatus.isEnabled(context) }, shell = adb::shell, log = log)
-                        .also { if (it) observedAdbState.set(true) }
-                }
-            }
-        }
-        return enableUntil(
-            deadline,
-            isCancelled,
-            { permitted(context) },
-            stateWithAdbObservation({ CarHotspotStatus.isEnabled(context) }, observedAdbState),
-            startFallback = startAdb,
-            start = startReflection,
-        ).also { log("car hotspot auto-enable: ${it.diagnostic}") }
-    }
+    ): Result = Result.PERMISSION_REQUIRED
 
     /** An ADB observation supplements hidden platform status, but never overrides a current off state. */
     internal fun stateWithAdbObservation(

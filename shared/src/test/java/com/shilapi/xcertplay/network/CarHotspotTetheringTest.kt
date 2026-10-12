@@ -1,5 +1,6 @@
 package com.shilapi.xcertplay.network
 
+import android.content.ContextWrapper
 import android.os.ResultReceiver
 import java.lang.reflect.InvocationTargetException
 import java.util.concurrent.CountDownLatch
@@ -18,6 +19,19 @@ import com.shilapi.xcertplay.network.CarHotspotTethering.Result
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], manifest = Config.NONE)
 class CarHotspotTetheringTest {
+    @Test fun disabledPublicAdapterDoesNotInspectContextOrCallbacks() {
+        val context = ContextWrapper(null)
+        assertFalse(CarHotspotTethering.permitted(context))
+        repeat(3) {
+            assertEquals(Result.PERMISSION_REQUIRED, CarHotspotTethering.enable(
+                context,
+                isCancelled = { error("Disabled adapter must not invoke cancellation callbacks") },
+                timeoutMillis = -1,
+                log = { error("Disabled adapter must not log activity") },
+            ))
+        }
+    }
+
     @Test fun existingHotspotNeedsNoGrantOrStartCall() {
         assertEquals(Result.READY, enable(canWrite = false, state = { true }))
     }

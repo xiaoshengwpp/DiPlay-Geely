@@ -119,7 +119,7 @@ class WheelKeyPermissionSetupTest {
         assertFalse(NavigationWheelSettings.restoreAllowed(context))
         assertFalse(WheelKeyService.needsRestore(context))
         for (mayAsk in listOf(true, false)) {
-            assertEquals(LocalAdb.Access.UNREACHABLE, WheelKeyService.enableOverAdb(context, mayAsk))
+            assertEquals(LocalAdb.Access.UNSUPPORTED, WheelKeyService.enableOverAdb(context, mayAsk))
         }
         WheelKeyService.restoreIfNeeded(context)
         assertRefusedWithoutSideEffects(::shell) { WheelKeyService.needsRestore(context) }

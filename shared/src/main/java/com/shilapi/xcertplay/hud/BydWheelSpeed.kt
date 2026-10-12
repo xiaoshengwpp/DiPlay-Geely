@@ -1,15 +1,11 @@
 package com.shilapi.xcertplay.hud
 
 import android.content.Context
-import android.os.SystemClock
-import android.util.Log
 import com.shilapi.xcertplay.transport.VehicleGear
 import com.shilapi.xcertplay.transport.VehicleSpeedReading
 import com.shilapi.xcertplay.transport.VehicleSpeedSample
 import com.shilapi.xcertplay.transport.VehicleSpeedSource
-import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledExecutorService
-import java.util.concurrent.TimeUnit
 
 /**
  * Speed and gear through the adb shell (autoservice binder), where apps would need a BYD signature.
@@ -42,78 +38,16 @@ internal object BydWheelSpeed {
     }
 }
 
-/**
- * Optional, needs ADB over network: wheel speed for the iPhone's dead reckoning in tunnels. Reads the
- * speed four times a second and the gear once a second, only while the iPhone asks for location.
- */
+/** No-op compatibility interface. This product has no live vehicle access implementation. */
 internal object BydWheelSpeedSource : VehicleSpeedSource {
-    private const val TAG = "DiPlay-BYD-Speed"
-    private const val READ_MILLIS = 250L
-    private const val GEAR_EVERY_READS = 4
-    private const val MAX_SAMPLES = 40
-
-    private val shell by lazy { BydAdbShell(TAG) }
+    private val shell by lazy { Unit }
     private var context: Context? = null
     private var executor: ScheduledExecutorService? = null
     private val samples = ArrayList<VehicleSpeedSample>()
     private var gear: VehicleGear? = null
-    private var reads = 0
-    private var firstSampleLogged = false
-
-    fun attach(appContext: Context) = apply {
-        if (GeelyVendorPolicy.bydWheelSpeed) context = appContext.applicationContext
-    }
-
-    @Synchronized
-    override fun start() {
-        if (!GeelyVendorPolicy.bydWheelSpeed) return
-        if (executor != null) return
-        samples.clear()
-        gear = null
-        reads = 0
-        firstSampleLogged = false
-        executor = Executors.newSingleThreadScheduledExecutor { runnable ->
-            Thread(runnable, "diplay-wheel-speed").apply { isDaemon = true }
-        }.also { it.scheduleWithFixedDelay(::poll, 0, READ_MILLIS, TimeUnit.MILLISECONDS) }
-        Log.i(TAG, "wheel speed started")
-    }
-
-    override fun stop() {
-        if (!GeelyVendorPolicy.bydWheelSpeed) return
-        val running = synchronized(this) { executor.also { executor = null } } ?: return
-        // Close adb on the reader thread, after any read in flight, then let the thread end.
-        running.execute { shell.close() }
-        running.shutdown()
-        Log.i(TAG, "wheel speed stopped")
-    }
-
-    @Synchronized
-    override fun drain(): VehicleSpeedReading? {
-        if (!GeelyVendorPolicy.bydWheelSpeed) return null
-        val current = gear ?: return null
-        if (samples.isEmpty()) return null
-        return VehicleSpeedReading(current, samples.toList()).also { samples.clear() }
-    }
-
-    private fun poll() {
-        if (!GeelyVendorPolicy.bydWheelSpeed) return
-        val app = context ?: return
-        if (reads++ % GEAR_EVERY_READS == 0) {
-            BydWheelSpeed.gear(shell.run(app, BydWheelSpeed.gearCommand(app)))?.let { next ->
-                val changed = synchronized(this) { (gear != next).also { gear = next } }
-                if (changed) Log.i(TAG, "gear $next")
-            }
-        }
-        val before = SystemClock.elapsedRealtime()
-        val speed = BydWheelSpeed.metersPerSecond(shell.run(app, BydWheelSpeed.speedCommand(app))) ?: return
-        val sample = VehicleSpeedSample((before + SystemClock.elapsedRealtime()) / 2, speed)
-        synchronized(this) {
-            if (samples.size == MAX_SAMPLES) samples.removeAt(0)
-            samples += sample
-        }
-        if (!firstSampleLogged) {
-            firstSampleLogged = true
-            Log.i(TAG, "first wheel speed ${"%.1f".format(speed * 3.6)} km/h")
-        }
-    }
+    fun attach(appContext: Context) = this
+    override fun start() = Unit
+    override fun stop() = Unit
+    override fun drain(): VehicleSpeedReading? = null
+    private fun poll() = Unit
 }

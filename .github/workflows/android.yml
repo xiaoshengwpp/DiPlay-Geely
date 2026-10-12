@@ -18,6 +18,7 @@ jobs:
         run: |
           python3 -m unittest discover -s scripts -p "test_*.py" -v
           python3 common/src/test/python/test_geely_0216_ui_boundary.py -v
+          python3 -m unittest discover -s shared/src/test/python -p "test_*.py" -v
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -36,6 +37,7 @@ jobs:
           path: |
             shared/build/reports/tests/
             common/build/reports/tests/
+            common/build/reports/album-artwork-ui/
             mobile/build/reports/lint-results-debug.html
             samples/home/build/reports/tests/
             samples/home/build/reports/lint-results-debug.html

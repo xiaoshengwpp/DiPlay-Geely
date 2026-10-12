@@ -1,5 +1,6 @@
 package com.shilapi.xcertplay
 
+import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
@@ -555,9 +556,12 @@ class AdaptiveSettingsUiTest {
         val audio = visibleIn(R.string.audio)
         val vehicle = visibleIn(R.string.settings_vehicle)
         val advanced = visibleIn(R.string.settings_advanced)
+        val connection = visibleIn(R.string.connection)
 
+        assertTrue(connection.any { it.startsWith(text(R.string.settings_usb_charging)) })
+        assertFalse(advanced.any { it.startsWith(text(R.string.settings_usb_charging)) })
         assertTrue(audio.any { it.startsWith(text(R.string.music_buffer)) })
-        listOf(R.string.main_buffered_audio, R.string.settings_car_bluetooth_audio, R.string.efficient_video, R.string.smooth_video, R.string.settings_direct_video_output, R.string.settings_low_latency_decoder, R.string.call_echo_cancellation, R.string.call_voice_filter, R.string.contrib_audio_home_toggle_audio_focus).forEach {
+        listOf(R.string.main_buffered_audio, R.string.settings_car_bluetooth_audio, R.string.efficient_video, R.string.smooth_video, R.string.settings_direct_video_output, R.string.settings_low_latency_decoder, R.string.call_echo_cancellation, R.string.call_voice_filter, R.string.settings_disable_media_key_audio_focus, R.string.contrib_audio_home_toggle_audio_focus).forEach {
             assertTrue(text(it), text(it) in advanced)
             assertFalse(text(it), text(it) in audio)
         }
@@ -577,9 +581,40 @@ class AdaptiveSettingsUiTest {
         assertFalse(audio.any { it.startsWith(text(R.string.settings_app_appearance)) })
         assertFalse(vehicle.any { it.startsWith(text(R.string.settings_app_appearance)) })
         assertFalse(advanced.any { it.startsWith(text(R.string.settings_app_appearance)) })
-        listOf(R.string.main_buffered_audio, R.string.efficient_video, R.string.smooth_video, R.string.settings_direct_video_output, R.string.settings_low_latency_decoder, R.string.call_echo_cancellation, R.string.call_voice_filter, R.string.right_hand_drive, R.string.car_button_in_carplay,
+        listOf(R.string.main_buffered_audio, R.string.efficient_video, R.string.smooth_video, R.string.settings_direct_video_output, R.string.settings_low_latency_decoder, R.string.call_echo_cancellation, R.string.call_voice_filter, R.string.settings_disable_media_key_audio_focus, R.string.right_hand_drive, R.string.car_button_in_carplay,
             R.string.side_panel, R.string.split_screen_areas, R.string.carplay_rotation).forEach {
             assertFalse(text(it), text(it) in display)
+        }
+    }
+
+    @Test fun usbChargingIsSavedForTheNextWiredConnectionWithoutDroppingTheSession() {
+        AirPlayPersistence.saveWirelessEnabled(context, false)
+        val screen = openSettings()
+        val session = mock(CarPlayController::class.java)
+        var stops = 0
+        CarPlayBackgroundSession.store(session, mock(AndroidMediaSink::class.java), 800, 480, Any(),
+            CarPlaySessionDisplay(800, 480, Surface.ROTATION_0, false, false, 800, 480)) { stops++ }
+        CarPlayBackgroundSession.active = true
+        try {
+            PendingReconnect.clear()
+            ReflectionHelpers.setField(screen, "settingsCategory", SettingsCategory.CONNECTION)
+            ReflectionHelpers.callInstanceMethod<Unit>(screen, "render")
+            val row = texts(screen).single { it.text.startsWith(screen.getString(R.string.settings_usb_charging)) }
+            assertEquals("${screen.getString(R.string.settings_usb_charging)} · ${screen.getString(R.string.settings_usb_charging_normal)}", row.text.toString())
+            row.performClick()
+            val dialog = ShadowAlertDialog.getLatestAlertDialog()
+            assertEquals(screen.getString(R.string.save), dialog.getButton(AlertDialog.BUTTON_POSITIVE).text.toString())
+            shadowOf(dialog).clickOnItem(UsbChargingCurrent.entries.indexOf(UsbChargingCurrent.LOW))
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
+            shadowOf(Looper.getMainLooper()).idle()
+
+            assertEquals(UsbChargingCurrent.LOW, AirPlayPersistence.loadUsbChargingCurrent(context))
+            assertTrue(PendingReconnect.isPending(session))
+            assertEquals(0, stops)
+            assertSame(session, CarPlayBackgroundSession.snapshot()?.controller)
+        } finally {
+            CarPlayBackgroundSession.clear()
+            PendingReconnect.clear()
         }
     }
 
@@ -613,6 +648,76 @@ class AdaptiveSettingsUiTest {
             assertTrue(AirPlayPersistence.loadCallEchoCancellation(context))
             assertTrue(AirPlayPersistence.loadCallVoiceFilter(context))
         } finally {
+            CarPlayBackgroundSession.clear()
+            PendingReconnect.clear()
+        }
+    }
+
+    @Test
+    @Config(sdk = [28])
+    fun mtkDecoderTuningAppearsOnlyForMtkAndMarksReconnect() {
+        AirPlayPersistence.saveMtkDecoderTuning(context, false)
+        val screen = openSettings()
+        ReflectionHelpers.setField(screen, "settingsCategory", SettingsCategory.ADVANCED)
+        screen.selectedMtkDecoderName = { null }
+        ReflectionHelpers.callInstanceMethod<Unit>(screen, "render")
+        assertFalse(texts(screen).any { it.text == screen.getString(R.string.settings_mtk_decoder_tuning) })
+
+        val decoderName = "OMX.MTK.VIDEO.DECODER.HEVC"
+        screen.selectedMtkDecoderName = { decoderName }
+        ReflectionHelpers.callInstanceMethod<Unit>(screen, "render")
+        assertTrue(texts(screen).any {
+            it.text == screen.getString(R.string.settings_mtk_decoder_tuning_description, decoderName)
+        })
+
+        val session = mock(CarPlayController::class.java)
+        CarPlayBackgroundSession.store(session, mock(AndroidMediaSink::class.java), 800, 480, Any(),
+            CarPlaySessionDisplay(800, 480, Surface.ROTATION_0, false, false, 800, 480)) {}
+        CarPlayBackgroundSession.active = true
+        try {
+            val setting = descendants(screen.window.decorView).filterIsInstance<Switch>()
+                .single { it.contentDescription == screen.getString(R.string.settings_mtk_decoder_tuning) }
+            assertFalse(setting.isChecked)
+            setting.performClick()
+
+            assertTrue(AirPlayPersistence.loadMtkDecoderTuning(context))
+            assertTrue(PendingReconnect.isPending(session))
+            assertSame(session, CarPlayBackgroundSession.snapshot()?.controller)
+        } finally {
+            AirPlayPersistence.saveMtkDecoderTuning(context, false)
+            CarPlayBackgroundSession.clear()
+            PendingReconnect.clear()
+        }
+    }
+
+    @Test
+    @Config(sdk = [28, 33])
+    fun disablingMediaKeyAudioFocusIsOptInAndMarksTheActiveSessionForReconnect() {
+        AirPlayPersistence.saveDisableMediaKeyAudioFocus(context, false)
+        val screen = openSettings()
+        val session = mock(CarPlayController::class.java)
+        var stops = 0
+        CarPlayBackgroundSession.store(session, mock(AndroidMediaSink::class.java), 800, 480, Any(),
+            CarPlaySessionDisplay(800, 480, Surface.ROTATION_0, false, false, 800, 480)) { stops++ }
+        CarPlayBackgroundSession.active = true
+        try {
+            ReflectionHelpers.setField(screen, "settingsCategory", SettingsCategory.ADVANCED)
+            PendingReconnect.clear()
+            ReflectionHelpers.callInstanceMethod<Unit>(screen, "render")
+            val setting = descendants(screen.window.decorView).filterIsInstance<Switch>()
+                .single { it.contentDescription == screen.getString(R.string.settings_disable_media_key_audio_focus) }
+            assertFalse(setting.isChecked)
+
+            setting.performClick()
+
+            assertTrue(AirPlayPersistence.loadDisableMediaKeyAudioFocus(context))
+            assertTrue(PendingReconnect.isPending(session))
+            assertEquals(View.VISIBLE, ReflectionHelpers.getField<View>(screen, "reconnectBar").visibility)
+            assertSame(session, CarPlayBackgroundSession.snapshot()?.controller)
+            assertEquals(0, stops)
+            assertEquals(null, shadowOf(screen).nextStartedActivity)
+        } finally {
+            AirPlayPersistence.saveDisableMediaKeyAudioFocus(context, false)
             CarPlayBackgroundSession.clear()
             PendingReconnect.clear()
         }
@@ -724,16 +829,16 @@ class AdaptiveSettingsUiTest {
     }
 
     @Test fun compactLanguageAndAboutDestinationsWork() {
-        verifyLanguageAndAboutDestinations()
+        verifyLanguageAndAboutDestinations(expanded = false)
     }
 
     @Test
     @Config(qualifiers = "en-w1000dp-h700dp")
     fun expandedLanguageAndAboutDestinationsWork() {
-        verifyLanguageAndAboutDestinations()
+        verifyLanguageAndAboutDestinations(expanded = true)
     }
 
-    private fun verifyLanguageAndAboutDestinations() {
+    private fun verifyLanguageAndAboutDestinations(expanded: Boolean) {
         val screen = openSettings()
         val categoryScroll = ReflectionHelpers.getField<ScrollView>(screen, "rootScroll")
         val languageDestination = descendants(categoryScroll).single {
@@ -762,11 +867,15 @@ class AdaptiveSettingsUiTest {
         ReflectionHelpers.callInstanceMethod<Unit>(screen, "openSettingsCategory",
             ReflectionHelpers.ClassParameter(SettingsCategory::class.java, SettingsCategory.OVERVIEW))
         open(R.string.about)
-        assertEquals("about", ReflectionHelpers.getField<String>(screen, "page"))
+        assertEquals(SettingsCategory.ABOUT, ReflectionHelpers.getField<SettingsCategory>(screen, "settingsCategory"))
         assertTrue(texts(screen).any { it.text == screen.getString(R.string.carplay_at_home_in_your_car) })
         screen.onBackPressedDispatcher.onBackPressed()
-        assertEquals("settings", ReflectionHelpers.getField<String>(screen, "page"))
-        assertEquals(SettingsCategory.OVERVIEW, ReflectionHelpers.getField<SettingsCategory>(screen, "settingsCategory"))
+        if (expanded) {
+            assertEquals("home", ReflectionHelpers.getField<String>(screen, "page"))
+        } else {
+            assertEquals("settings", ReflectionHelpers.getField<String>(screen, "page"))
+            assertEquals(SettingsCategory.OVERVIEW, ReflectionHelpers.getField<SettingsCategory>(screen, "settingsCategory"))
+        }
     }
 
     @Test

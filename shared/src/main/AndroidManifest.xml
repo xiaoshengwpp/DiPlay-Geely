@@ -33,7 +33,6 @@
         <intent>
             <action android:name="android.settings.WIFI_SETTINGS" />
         </intent>
-        <package android:name="com.byd.clusterdebug" />
         <package android:name="com.ts.car.someip.service" />
         <package android:name="com.byd.amapservice" />
         <package android:name="com.byd.automap" />
@@ -62,5 +61,16 @@
             android:name="com.shilapi.xcertplay.network.CarPlayVpnService"
             android:permission="android.permission.BIND_VPN_SERVICE"
             android:exported="false" />
+
+        <!-- Unverified vendor phone routing is disabled for this product. -->
+        <service
+            android:name="com.shilapi.xcertplay.telecom.PhoneAudioConnectionService"
+            android:permission="android.permission.BIND_TELECOM_CONNECTION_SERVICE"
+            android:enabled="false"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.telecom.ConnectionService" />
+            </intent-filter>
+        </service>
     </application>
 </manifest>

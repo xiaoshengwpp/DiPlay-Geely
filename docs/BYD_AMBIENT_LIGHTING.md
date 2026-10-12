@@ -20,7 +20,25 @@ The controller samples every 50 ms and limits lamp submissions to one per 200 ms
 
 Restoration is best effort. Power loss, forced process death, a permanently blocked vehicle service or repeated failed readback can prevent restoration. The worker's final failed restore is reported before it exits. This patch does not guarantee recovery under those conditions.
 
+## Follow album artwork colors
+
+The optional **Follow album artwork colors** switch builds on the music-lighting contribution by 寒叙 (@Hanxu4131). It is off for existing and new installations unless explicitly saved, so the selected-color mode keeps its current behavior. Save applies the choice without reconnecting CarPlay; Cancel keeps the previous configuration.
+
+With artwork following enabled, an available colored cover supplies the base hue. Musical analysis still controls brightness and color movement within nearby supported OEM colors. The lamp interface accepts color numbers, not arbitrary RGB, so artwork colors are approximated using a 31-color OEM preview reference. That reference was checked on the contributor's 2023 Tang DM-i Champion Edition / platform 21; it is not a calibrated color measurement or a guarantee for other BYD firmware.
+
+Gray, black, transparent and very dark pixels do not supply a usable colored hue. If no usable artwork color is found, the palette falls back to **all 31 supported color numbers**, following the chosen music mode rather than staying on the previous song's hue. Missing or unreadable artwork uses the same fallback. This means a gray or black cover does not make the lamps gray or black.
+
+White is a secondary fallback only: the existing colored-hue extraction runs first. When it finds no valid colored hue, a cover with at least half its sampled area occupied by bright, low-chroma pixels can select white or cold white. A mostly white cover with a usable colored detail still follows that colored detail. Neutral/warm white maps to OEM color 29; a qualifying blue/cyan cast maps to cold white, color 30.
+
+Artwork can arrive after the CarPlay connection or after playback starts. The integration retains the current session's artwork, requests missing initial artwork within bounded limits and handles a real track change. Changes to a title alone can be lyrics; they do not require repeatedly decoding the same cover. Artwork is sampled on the existing artwork worker, outside PCM writes. Stale callbacks from a replaced session are ignored.
+
+If the phone reuses the same artwork reference, source app, artist, album and duration and reports no observable position restart, a title change cannot reliably distinguish a new track from a lyric update. A later artwork payload is still accepted; the feature does not invent a cover from the nearest cached item.
+
+The source implementation was exercised in the contributor's BYD CarPlay fork. This new upstream port has separate local/CI checks and has not been installed in a vehicle. No vehicle identifiers, phone records, raw in-car logs, OEM artwork files or third-party APKs are included.
+
 ## Evidence and verification
+
+Album-color extension validation on 2026-10-09: the full nine-task repository CI command passed locally, with 2258 tests reported, zero failures/errors and 1 existing platform skip. All three lint tasks had zero errors, and mobile/home/maphost source-only debug builds assembled. Compact 600dp / font 1.3 and full 1280dp / font 1.5 captures were rendered at a 960px physical viewport and visually checked; the dialog controls and Save/Cancel remained accessible. This does not replace vehicle acceptance of the upstream port.
 
 The source ambient-light feature was field-tested by the contributor on a 2023 BYD Tang DM-i Champion Edition / platform-controller 21. These local observations motivated this module; they do not verify this upstream integration, other model years or every recovery path. Exact earlier-build behavior should be attributed to that local build only. This public patch has not been installed or tested in a vehicle.
 

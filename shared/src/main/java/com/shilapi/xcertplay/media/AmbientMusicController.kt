@@ -18,6 +18,8 @@ object AmbientMusicController {
     private val activeSink = AtomicLong()
     private val activeRenderer = AtomicLong()
     private val phonePlayback = AmbientPhonePlaybackState()
+    @Volatile private var artworkOwner: Any? = null
+    private var albumColor: Int? = null
     @Volatile private var settings = AmbientMusicSettings.Values()
     private var context: Context? = null
     private var envelope: AmbientMusicEnvelope? = null
@@ -83,7 +85,7 @@ object AmbientMusicController {
             if (activeSink.get() != token) return@execute
             this.context = context.applicationContext
             settings = AmbientMusicSettings.load(context)
-            colors = ambientMusicColorDetector(settings.color, settings.selectedColors)
+            resetColors()
             brightnessEnvelope = AmbientMusicBrightness(settings.speed)
             allowed = settings.enabled; envelope = null; playback = null
             if (!settings.enabled) restoreOriginal()
@@ -109,12 +111,48 @@ object AmbientMusicController {
     internal fun wantsPcm(token: Long): Boolean = token != 0L && token == activeRenderer.get() && settings.enabled && settings.music
 
     /** Binds phone playback callbacks to the current CarPlay media owner. */
-    fun claimPlaybackOwner(owner: Any) = phonePlayback.claim(owner)
+    @Synchronized fun claimPlaybackOwner(owner: Any) {
+        phonePlayback.claim(owner)
+        if (artworkOwner === owner) return
+        artworkOwner = owner
+        albumColorChanged(owner, null)
+    }
+
+    /** Already decoded artwork is sampled on the existing artwork worker, never on PCM writes. */
+    fun albumColorChanged(owner: Any, color: Int?) {
+        executor.execute {
+            if (artworkOwner !== owner) return@execute
+            val valid = color?.takeIf { it in 1..31 }
+            if (albumColor == valid) return@execute
+            albumColor = valid
+            if (settings.colorSource == AmbientColorSource.ALBUM) resetColors(preserveTiming = true)
+        }
+    }
 
     /** Stale callbacks from a replaced media owner are ignored. */
     fun phonePlaybackChanged(owner: Any, playing: Boolean): Boolean = phonePlayback.update(owner, playing)
 
-    fun releasePlaybackOwner(owner: Any): Boolean = phonePlayback.release(owner)
+    @Synchronized fun releasePlaybackOwner(owner: Any): Boolean {
+        if (artworkOwner === owner) {
+            artworkOwner = null
+            executor.execute {
+                if (artworkOwner != null) return@execute
+                albumColor = null
+                if (settings.colorSource == AmbientColorSource.ALBUM) resetColors(preserveTiming = true)
+            }
+        }
+        return phonePlayback.release(owner)
+    }
+
+    private fun resetColors(preserveTiming: Boolean = false) {
+        val palette = ambientColorPalette(settings.colorSource, settings.selectedColors, albumColor)
+        val initial = if (settings.colorSource == AmbientColorSource.ALBUM) albumColor ?: palette.first()
+            else settings.color
+        val random = if (settings.colorSource == AmbientColorSource.ALBUM && albumColor == null)
+            ({ size: Int -> kotlin.random.Random.nextInt(size) }) else null
+        if (preserveTiming) colors.updatePalette(initial, palette, random)
+        else colors = AmbientMusicColorDetector(initial, palette, AmbientColorSpeed.STANDARD, random)
+    }
 
     /** Checks existing authorization and lamp readback only; never asks for ADB or writes a lamp. */
     fun checkSupport(context: Context): java.util.concurrent.CompletableFuture<Boolean> {
@@ -140,7 +178,7 @@ object AmbientMusicController {
         executor.execute {
             this.context = context.applicationContext
             settings = AmbientMusicSettings.load(context)
-            colors = ambientMusicColorDetector(settings.color, settings.selectedColors)
+            resetColors()
             brightnessEnvelope = AmbientMusicBrightness(settings.speed)
             allowed = settings.enabled
             if (!settings.enabled) restoreOriginal()
@@ -199,7 +237,8 @@ object AmbientMusicController {
         }
         val area = if (target == AmbientMusicTarget.LOWEST) 3 else values.area
         val color = if (target == AmbientMusicTarget.FOLLOW_PLAYBACK && values.colorCycle)
-            colors.color(values.colorMode, nowMillis, rms, energy.bassRms) else values.selectedColors.firstOrNull() ?: values.color
+            colors.color(values.colorMode, nowMillis, rms, energy.bassRms) else if (values.colorSource == AmbientColorSource.ALBUM) albumColor ?: 1
+            else values.selectedColors.firstOrNull() ?: values.color
         lampSession.update(Triple(area, color, brightness))
     }
 
