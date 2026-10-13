@@ -16,6 +16,9 @@ class OwnerReleaseTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.source = self.root / "source"
         self.source.mkdir()
+        (self.source / "gradle").mkdir()
+        (self.source / "gradle/geely-version.properties").write_text(
+            "upstreamVersionName=0.2.18\nupstreamVersionCode=37\ngeelyRevision=2\n")
         self.apk = self.root / "inert.zip"
 
     def fixture(self, extra=()):
@@ -30,6 +33,30 @@ class OwnerReleaseTests(unittest.TestCase):
     def extract(self, lock, destination=None):
         with patch.object(r, "LOCK", lock):
             r.extract(self.apk, destination or self.root / "auth", self.source)
+
+    def test_source_version_matches_before_sensitive_steps(self):
+        with patch.object(r.subprocess, "check_output", side_effect=[r.LOCK["source_commit"], ""]):
+            r.check_source(self.source)
+
+    def test_source_old_version_fails_before_sensitive_steps(self):
+        path = self.source / "gradle/geely-version.properties"
+        path.write_text(path.read_text().replace("geelyRevision=2", "geelyRevision=1"))
+        with patch.object(r.subprocess, "check_output", side_effect=[r.LOCK["source_commit"], ""]):
+            with self.assertRaisesRegex(ValueError, "Source version mismatch"):
+                r.check_source(self.source)
+
+    def test_source_missing_version_fails_before_sensitive_steps(self):
+        (self.source / "gradle/geely-version.properties").unlink()
+        with patch.object(r.subprocess, "check_output", side_effect=[r.LOCK["source_commit"], ""]):
+            with self.assertRaises(FileNotFoundError):
+                r.check_source(self.source)
+
+    def test_source_wrong_upstream_fails_before_sensitive_steps(self):
+        path = self.source / "gradle/geely-version.properties"
+        path.write_text(path.read_text().replace("0.2.18", "0.2.19"))
+        with patch.object(r.subprocess, "check_output", side_effect=[r.LOCK["source_commit"], ""]):
+            with self.assertRaisesRegex(ValueError, "Source version mismatch"):
+                r.check_source(self.source)
 
     def test_inert_success_exact_two_files(self):
         self.extract(self.fixture())
@@ -88,10 +115,10 @@ class OwnerReleaseTests(unittest.TestCase):
         with self.assertRaises(ValueError): r.validate_directory(self.root / "auth", self.source)
 
     def test_public_metadata(self):
-        badging = "package: name='io.github.xiaoshengwpp.diplay.geely' versionCode='37001' versionName='0.2.18-geely.1'"
+        badging = "package: name='io.github.xiaoshengwpp.diplay.geely' versionCode='37002' versionName='0.2.18-geely.2'"
         signatures = "Signer #1 certificate SHA-256 digest: " + "a" * 64
         self.assertEqual(r.parse_public_metadata(badging, signatures), "a" * 64)
-        for bad, sig in ((badging.replace("37001", "37"), signatures), (badging, ""), (badging, signatures + "\n" + signatures)):
+        for bad, sig in ((badging.replace("37002", "37"), signatures), (badging, ""), (badging, signatures + "\n" + signatures)):
             with self.assertRaises(ValueError): r.parse_public_metadata(bad, sig)
 
     def verify_fixture(self, extra=(), commit=None, dirty="", badging=None, mismatch=False):
@@ -101,7 +128,7 @@ class OwnerReleaseTests(unittest.TestCase):
         for name in r.ASSETS:
             (runtime / name.removeprefix("assets/")).write_text("MISMATCH INERT TEXT" if mismatch else "INERT SYNTHETIC TEXT, NOT A KEY OR CERTIFICATE")
         calls = [commit or r.LOCK["source_commit"], dirty,
-                 badging or "package: name='io.github.xiaoshengwpp.diplay.geely' versionCode='37001' versionName='0.2.18-geely.1'",
+                 badging or "package: name='io.github.xiaoshengwpp.diplay.geely' versionCode='37002' versionName='0.2.18-geely.2'",
                  "Signer #1 certificate SHA-256 digest: " + "a" * 64]
         with patch.object(r.subprocess, "check_output", side_effect=calls):
             r.verify(self.apk, self.source, runtime, "mock-aapt", "mock-apksigner", self.root / "delivery")
@@ -110,7 +137,7 @@ class OwnerReleaseTests(unittest.TestCase):
         import json
         self.verify_fixture()
         output = self.root / "delivery"
-        self.assertEqual({p.name for p in output.iterdir()}, {"DiPlay-0.2.18-geely.1.apk", "SHA256SUMS.txt", "build-manifest.json"})
+        self.assertEqual({p.name for p in output.iterdir()}, {"DiPlay-0.2.18-geely.2.apk", "SHA256SUMS.txt", "build-manifest.json"})
         manifest = json.loads((output / "build-manifest.json").read_text())
         self.assertEqual(manifest["signing_certificate_sha256"], "a" * 64)
         self.assertFalse(manifest["vehicle_tested"])
@@ -149,6 +176,19 @@ class OwnerReleaseTests(unittest.TestCase):
         for automatic_event in ("push:", "pull_request:", "pull_request_target:", "schedule:", "workflow_run:", "repository_dispatch:"):
             self.assertNotIn(automatic_event, enabled)
 
+    def test_workflow_checks_source_before_sensitive_steps(self):
+        text = (Path(__file__).resolve().parents[1] / ".github/workflows/owner-release.yml").read_text()
+        self.assertLess(text.index("check-source --source build-source"),
+                        text.index("Owner-selected identity import and signed build"))
+        self.assertIn(f"owner-DiPlay-{r.LOCK['version_name']}", text)
+        self.assertIn(f"owner-delivery/DiPlay-{r.LOCK['version_name']}.apk", text)
+        self.assertIn("retention-days: 1", text)
+        self.assertIn("if-no-files-found: error", text)
+        self.assertIn("persist-credentials: false", text)
+        self.assertNotIn("contents: write", text)
+        self.assertNotIn("actions/cache", text)
+        self.assertNotIn("source_ref:", text)
+
     def test_template_is_inactive_and_manual_only(self):
         text = (Path(__file__).resolve().parents[1] / "docs/templates/owner-release.yml.example").read_text()
         self.assertIn("workflow_dispatch:", text)
@@ -162,3 +202,4 @@ class OwnerReleaseTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
