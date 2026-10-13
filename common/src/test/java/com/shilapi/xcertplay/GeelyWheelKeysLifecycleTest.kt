@@ -104,7 +104,7 @@ class GeelyWheelKeysLifecycleTest {
         context.service = original
     }
 
-    @Test fun expectedInterfaceRegistersOnceAndStopReleasesListenerAndBinding() {
+    @Test @Config(sdk = [25, 28, 30, 33]) fun expectedInterfaceRegistersOnceAndStopReleasesListenerAndBinding() {
         val owner = owner()
         GeelyWheelKeys.start(context, owner)
         GeelyWheelKeys.start(context, owner)
@@ -308,6 +308,48 @@ class GeelyWheelKeysLifecycleTest {
         idle()
         verify(controller, never()).sendMediaButton(anyInt())
         verify(controller, never()).requestSiri()
+    }
+
+    @Test @Config(sdk = [25, 28, 30, 33]) fun queuedCallbacksCannotTransferToANewSessionOnTheSameController() {
+        val controller = attach()
+        val vendor = VendorInput()
+        context.connections.single().onServiceConnected(component, vendor)
+        idle()
+        val listener = vendor.registrations.single()
+        listener.onShortClick(GeelyWheelKeyCodes.KEY_NEXT, 0)
+        listener.onLongPressTriggered(GeelyWheelKeyCodes.KEY_VOICE_ASSIST, 0)
+        // The binding and controller remain current, but their phone session has changed.
+        `when`(controller.activeAirPlaySessionToken()).thenReturn(Any())
+        idle()
+        verify(controller, never()).sendMediaButton(anyInt())
+        verify(controller, never()).requestSiri()
+        // New callbacks from the unchanged binding must still work for the replacement session.
+        listener.onShortClick(GeelyWheelKeyCodes.KEY_NEXT, 0)
+        listener.onLongPressTriggered(GeelyWheelKeyCodes.KEY_VOICE_ASSIST, 0)
+        idle()
+        verify(controller).sendMediaButton(CarPlayMediaButton.NEXT)
+        verify(controller).requestSiri()
+        assertEquals(1, context.connections.size)
+    }
+
+    @Test @Config(sdk = [25, 28, 30, 33]) fun callbacksWithoutASessionCannotBecomeValidWhileWaitingForTheHandler() {
+        val controller = attach()
+        val vendor = VendorInput()
+        context.connections.single().onServiceConnected(component, vendor)
+        idle()
+        val listener = vendor.registrations.single()
+        `when`(controller.activeAirPlaySessionToken()).thenReturn(null)
+        listener.onShortClick(GeelyWheelKeyCodes.KEY_PLAY_PAUSE, 0)
+        listener.onLongPressTriggered(GeelyWheelKeyCodes.KEY_VOICE_ASSIST, 0)
+        `when`(controller.activeAirPlaySessionToken()).thenReturn(Any())
+        idle()
+        verify(controller, never()).sendMediaButton(anyInt())
+        verify(controller, never()).requestSiri()
+        listener.onShortClick(GeelyWheelKeyCodes.KEY_PLAY_PAUSE, 0)
+        listener.onLongPressTriggered(GeelyWheelKeyCodes.KEY_VOICE_ASSIST, 0)
+        idle()
+        verify(controller).sendMediaButton(CarPlayMediaButton.PLAY_PAUSE)
+        verify(controller).requestSiri()
     }
 
     @Test fun avrCpRegistersOnlyVoiceAndChangingAudioPreferenceCannotDoubleFire() {

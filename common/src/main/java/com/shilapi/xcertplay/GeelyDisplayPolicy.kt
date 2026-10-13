@@ -35,6 +35,7 @@ internal data class GeelyDisplayInventory(
 internal class GeelyHudSelectionPolicy {
     private var selected: GeelyDisplayInfo? = null
     private var sawConnected = false
+    private var observedDisconnectEpoch: Long? = null
 
     fun selectedDisplayId(): Int? = selected?.displayId
 
@@ -43,12 +44,14 @@ internal class GeelyHudSelectionPolicy {
             ?: return false
         selected = target
         sawConnected = false
+        observedDisconnectEpoch = null
         return true
     }
 
     fun clear() {
         selected = null
         sawConnected = false
+        observedDisconnectEpoch = null
     }
 
     fun removed(displayId: Int) {
@@ -63,7 +66,14 @@ internal class GeelyHudSelectionPolicy {
         return current
     }
 
-    fun observeConnection(connected: Boolean) {
+    fun observeConnection(connected: Boolean, disconnectEpoch: Long = 0L) {
+        if (selected == null) return
+        val previous = observedDisconnectEpoch
+        if (previous != null && previous != disconnectEpoch) {
+            clear()
+            return
+        }
+        observedDisconnectEpoch = disconnectEpoch
         if (connected) sawConnected = true else if (sawConnected) clear()
     }
 }

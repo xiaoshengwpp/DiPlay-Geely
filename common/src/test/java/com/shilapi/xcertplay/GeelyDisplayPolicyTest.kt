@@ -1,5 +1,6 @@
 package com.shilapi.xcertplay
 
+import com.shilapi.xcertplay.glance.CarPlayGlance
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -93,6 +94,35 @@ class GeelyDisplayPolicyTest {
         policy.observeConnection(false)
         assertNull(policy.resolve(listOf(target)))
         policy.observeConnection(true)
+        assertNull(policy.resolve(listOf(target)))
+    }
+
+    @Test fun disconnectAndReconnectBetweenPollsRevokesSelection() {
+        val target = display()
+        val policy = GeelyHudSelectionPolicy()
+        CarPlayGlance.setConnected(true)
+        try {
+            val before = CarPlayGlance.snapshot()
+            policy.select(listOf(target), target.displayId)
+            policy.observeConnection(before.connected, before.disconnectEpoch)
+            CarPlayGlance.setConnected(false)
+            CarPlayGlance.setConnected(true)
+            val after = CarPlayGlance.snapshot()
+            assertTrue(after.connected)
+            assertEquals(before.disconnectEpoch + 1, after.disconnectEpoch)
+            policy.observeConnection(after.connected, after.disconnectEpoch)
+            assertNull(policy.resolve(listOf(target)))
+        } finally {
+            CarPlayGlance.setConnected(false)
+        }
+    }
+
+    @Test fun aPendingSelectionCannotSurviveAnUnobservedEntireConnection() {
+        val target = display()
+        val policy = GeelyHudSelectionPolicy()
+        policy.select(listOf(target), target.displayId)
+        policy.observeConnection(false, 3L)
+        policy.observeConnection(false, 4L)
         assertNull(policy.resolve(listOf(target)))
     }
 

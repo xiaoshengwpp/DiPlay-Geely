@@ -159,12 +159,12 @@ internal object GeelyWheelKeys {
         val listener = object : IInputListener.Stub() {
             override fun onKeyCodeEvent(keyCode: Int, event: Int, softKeyFunction: Int) = Unit
             override fun onShortClick(keyCode: Int, softKeyFunction: Int) {
-                handler.post { dispatch(connection, keyCode, longPress = false) }
+                queueDispatch(connection, keyCode, longPress = false)
             }
             override fun onHoldingPressStarted(keyCode: Int, softKeyFunction: Int) = Unit
             override fun onHoldingPressStopped(keyCode: Int, softKeyFunction: Int) = Unit
             override fun onLongPressTriggered(keyCode: Int, softKeyFunction: Int) {
-                handler.post { dispatch(connection, keyCode, longPress = true) }
+                queueDispatch(connection, keyCode, longPress = true)
             }
             override fun onDoubleClick(keyCode: Int, softKeyFunction: Int) = Unit
         }
@@ -232,9 +232,20 @@ internal object GeelyWheelKeys {
         }
     }
 
-    private fun dispatch(connection: InputConnection, keyCode: Int, longPress: Boolean) {
+    /** Capture phone ownership on the Binder callback thread, before waiting for the main handler. */
+    private fun queueDispatch(connection: InputConnection, keyCode: Int, longPress: Boolean) {
+        if (!current(connection)) return
+        val token = connection.session.controller.activeAirPlaySessionToken() ?: return
+        handler.post { dispatch(connection, keyCode, longPress, token) }
+    }
+
+    private fun dispatch(connection: InputConnection, keyCode: Int, longPress: Boolean, token: Any) {
         if (!current(connection) || !connection.subscribed || keyCode !in connection.codes) return
-        val stillCurrent = { current(connection) && connection.subscribed }
+        val stillCurrent = {
+            current(connection) && connection.subscribed &&
+                connection.session.controller.activeAirPlaySessionToken() === token
+        }
+        if (!stillCurrent()) return
         if (longPress) {
             if (keyCode == GeelyWheelKeyCodes.KEY_VOICE_ASSIST) {
                 CarPlayMediaKeys.onExternalSiriKey(connection.session.controller, stillCurrent)

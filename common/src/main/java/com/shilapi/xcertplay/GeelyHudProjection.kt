@@ -34,7 +34,9 @@ internal object GeelyHudSelection {
         val displays = GeelyDisplayCapabilities.read(context).displays
         val accepted = synchronized(this) {
             policy.select(displays, displayId).also { selected ->
-                if (selected) policy.observeConnection(CarPlayGlance.snapshot().connected)
+                if (selected) CarPlayGlance.snapshot().let {
+                    policy.observeConnection(it.connected, it.disconnectEpoch)
+                }
             }
         }
         if (accepted) {
@@ -51,7 +53,8 @@ internal object GeelyHudSelection {
     }
 
     @Synchronized internal fun resolve(displays: List<GeelyDisplayInfo>): GeelyDisplayInfo? = policy.resolve(displays)
-    @Synchronized internal fun observeConnection(connected: Boolean) = policy.observeConnection(connected)
+    @Synchronized internal fun observeConnection(snapshot: CarPlayGlance.Snapshot) =
+        policy.observeConnection(snapshot.connected, snapshot.disconnectEpoch)
     @Synchronized internal fun removed(displayId: Int) = policy.removed(displayId)
 }
 
@@ -118,7 +121,12 @@ internal class GeelyHudProjection(private val activity: Activity) : DisplayManag
             return
         }
         val glance = CarPlayGlance.snapshot()
-        GeelyHudSelection.observeConnection(glance.connected)
+        GeelyHudSelection.observeConnection(glance)
+        if (GeelyHudSelection.selectedDisplayId() == null) {
+            GeelyHudSelection.status = "disconnected_select_again"
+            dismiss()
+            return
+        }
         if (!glance.connected || glance.maneuverType == null) {
             GeelyHudSelection.status = if (glance.connected) "no_fresh_navigation" else "not_connected"
             dismiss()
