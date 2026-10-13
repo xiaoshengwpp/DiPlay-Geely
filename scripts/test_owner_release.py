@@ -18,7 +18,7 @@ class OwnerReleaseTests(unittest.TestCase):
         self.source.mkdir()
         (self.source / "gradle").mkdir()
         (self.source / "gradle/geely-version.properties").write_text(
-            "upstreamVersionName=0.2.18\nupstreamVersionCode=37\ngeelyRevision=2\n")
+            "upstreamVersionName=0.2.19\nupstreamVersionCode=38\ngeelyRevision=1\n")
         self.apk = self.root / "inert.zip"
 
     def fixture(self, extra=()):
@@ -38,9 +38,9 @@ class OwnerReleaseTests(unittest.TestCase):
         with patch.object(r.subprocess, "check_output", side_effect=[r.LOCK["source_commit"], ""]):
             r.check_source(self.source)
 
-    def test_source_old_version_fails_before_sensitive_steps(self):
+    def test_source_wrong_revision_fails_before_sensitive_steps(self):
         path = self.source / "gradle/geely-version.properties"
-        path.write_text(path.read_text().replace("geelyRevision=2", "geelyRevision=1"))
+        path.write_text(path.read_text().replace("geelyRevision=1", "geelyRevision=2"))
         with patch.object(r.subprocess, "check_output", side_effect=[r.LOCK["source_commit"], ""]):
             with self.assertRaisesRegex(ValueError, "Source version mismatch"):
                 r.check_source(self.source)
@@ -53,7 +53,7 @@ class OwnerReleaseTests(unittest.TestCase):
 
     def test_source_wrong_upstream_fails_before_sensitive_steps(self):
         path = self.source / "gradle/geely-version.properties"
-        path.write_text(path.read_text().replace("0.2.18", "0.2.19"))
+        path.write_text(path.read_text().replace("0.2.19", "0.2.18"))
         with patch.object(r.subprocess, "check_output", side_effect=[r.LOCK["source_commit"], ""]):
             with self.assertRaisesRegex(ValueError, "Source version mismatch"):
                 r.check_source(self.source)
@@ -115,10 +115,10 @@ class OwnerReleaseTests(unittest.TestCase):
         with self.assertRaises(ValueError): r.validate_directory(self.root / "auth", self.source)
 
     def test_public_metadata(self):
-        badging = "package: name='io.github.xiaoshengwpp.diplay.geely' versionCode='37002' versionName='0.2.18-geely.2'"
+        badging = "package: name='io.github.xiaoshengwpp.diplay.geely' versionCode='38001' versionName='0.2.19-geely.1'"
         signatures = "Signer #1 certificate SHA-256 digest: " + "a" * 64
         self.assertEqual(r.parse_public_metadata(badging, signatures), "a" * 64)
-        for bad, sig in ((badging.replace("37002", "37"), signatures), (badging, ""), (badging, signatures + "\n" + signatures)):
+        for bad, sig in ((badging.replace("38001", "37"), signatures), (badging, ""), (badging, signatures + "\n" + signatures)):
             with self.assertRaises(ValueError): r.parse_public_metadata(bad, sig)
 
     def verify_fixture(self, extra=(), commit=None, dirty="", badging=None, mismatch=False):
@@ -128,7 +128,7 @@ class OwnerReleaseTests(unittest.TestCase):
         for name in r.ASSETS:
             (runtime / name.removeprefix("assets/")).write_text("MISMATCH INERT TEXT" if mismatch else "INERT SYNTHETIC TEXT, NOT A KEY OR CERTIFICATE")
         calls = [commit or r.LOCK["source_commit"], dirty,
-                 badging or "package: name='io.github.xiaoshengwpp.diplay.geely' versionCode='37002' versionName='0.2.18-geely.2'",
+                 badging or "package: name='io.github.xiaoshengwpp.diplay.geely' versionCode='38001' versionName='0.2.19-geely.1'",
                  "Signer #1 certificate SHA-256 digest: " + "a" * 64]
         with patch.object(r.subprocess, "check_output", side_effect=calls):
             r.verify(self.apk, self.source, runtime, "mock-aapt", "mock-apksigner", self.root / "delivery")
@@ -137,10 +137,13 @@ class OwnerReleaseTests(unittest.TestCase):
         import json
         self.verify_fixture()
         output = self.root / "delivery"
-        self.assertEqual({p.name for p in output.iterdir()}, {"DiPlay-0.2.18-geely.2.apk", "SHA256SUMS.txt", "build-manifest.json"})
+        self.assertEqual({p.name for p in output.iterdir()}, {"DiPlay-0.2.19-geely.1.apk", "SHA256SUMS.txt", "build-manifest.json"})
         manifest = json.loads((output / "build-manifest.json").read_text())
         self.assertEqual(manifest["signing_certificate_sha256"], "a" * 64)
         self.assertFalse(manifest["vehicle_tested"])
+        self.assertEqual(manifest["upstream_source_commit"], "c30d3f0df18dd132739d864a9e054c73b3d57d8c")
+        self.assertEqual(manifest["official_apk_source_commit"], "e8d23603ccf5aa9c32ad5c999656c5fb492c83e6")
+        self.assertEqual(manifest["official_apk_url"], "https://github.com/shihabal3amri/DiPlay/releases/download/v0.2.18/DiPlay-0.2.18.apk")
         self.assertNotIn("INERT", (output / "build-manifest.json").read_text())
 
     def test_verification_rejects_mismatched_runtime_asset(self):
@@ -202,4 +205,5 @@ class OwnerReleaseTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
 

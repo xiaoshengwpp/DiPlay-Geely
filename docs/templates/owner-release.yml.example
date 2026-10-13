@@ -35,7 +35,7 @@ jobs:
           persist-credentials: false
       - uses: actions/checkout@v4
         with:
-          ref: 2c0de42807458e80482bfff719936b957c069819
+          ref: 75d45016f7a0cba1b5d01050c517066ea245c218
           path: build-source
           persist-credentials: false
       - name: Verify locked source before sensitive steps
@@ -88,11 +88,11 @@ jobs:
       - name: Store APK at owner's explicit choice (identity is extractable)
         uses: actions/upload-artifact@v4
         with:
-          name: owner-DiPlay-0.2.18-geely.2
+          name: owner-DiPlay-0.2.19-geely.1
           retention-days: 1
           if-no-files-found: error
           path: |
-            ${{ runner.temp }}/owner-delivery/DiPlay-0.2.18-geely.2.apk
+            ${{ runner.temp }}/owner-delivery/DiPlay-0.2.19-geely.1.apk
             ${{ runner.temp }}/owner-delivery/SHA256SUMS.txt
             ${{ runner.temp }}/owner-delivery/build-manifest.json
       - name: Remove transient outputs
@@ -101,4 +101,5 @@ jobs:
         run: |
           rm -rf -- "$RUNNER_TEMP/diplay-owner-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT" "$RUNNER_TEMP/owner-delivery" \
             "$GITHUB_WORKSPACE/build-source"
+
 
