@@ -4,7 +4,7 @@
 
 这是待审查的构建准备方案，不是已经生成的 APK。`.github/workflows/owner-release.yml` 是仅 owner 手动启动的入口；合并到默认分支后 GitHub 才会注册它。`docs/templates/owner-release.yml.example` 保留为内容一致的审查模板。本 PR 和合并动作不会下载官方 APK、提取真实身份、生成或导入真实签名密钥、配置 Secrets、触发签名构建或创建 Release。
 
-源码基线固定为 [`2c0de42807458e80482bfff719936b957c069819`](https://github.com/xiaoshengwpp/DiPlay-Geely/commit/2c0de42807458e80482bfff719936b957c069819)。它集成官方 0.2.18，仍需本方案代码审查、owner 的签名输入和亲自运行才能产生候选完整 APK。普通 Android checks 只证明源码测试、lint 和无身份 debug 构建，不能证明完整 CarPlay 认证或实车可用。
+源码基线固定为 [`75d45016f7a0cba1b5d01050c517066ea245c218`](https://github.com/xiaoshengwpp/DiPlay-Geely/commit/75d45016f7a0cba1b5d01050c517066ea245c218)。它集成官方 0.2.19 及后续源码，固定上游提交为 `c30d3f0df18dd132739d864a9e054c73b3d57d8c`，仍需本方案代码审查、owner 的签名输入和亲自运行才能产生候选完整 APK。普通 Android checks 只证明源码测试、lint 和无身份 debug 构建，不能证明完整 CarPlay 认证或实车可用。
 
 ## 为什么参考 CN，但不直接复制 workflow
 
@@ -18,14 +18,15 @@
 
 权威锁位于 `scripts/owner_release.py` 的 `LOCK`，workflow 中的 source ref 与 URL 必须保持一致。
 
-- 吉利构建源码：`2c0de42807458e80482bfff719936b957c069819`（PR #12 的已验证源码提交；不使用可变分支名）。
-- 官方源码：`e8d23603ccf5aa9c32ad5c999656c5fb492c83e6`
+- 吉利构建源码：`75d45016f7a0cba1b5d01050c517066ea245c218`（PR #14 的已验证源码提交；不使用可变分支名）。
+- 整合的官方源码：`c30d3f0df18dd132739d864a9e054c73b3d57d8c`（0.2.19 及后续改进）
+- 身份输入 APK 对应的官方源码：`e8d23603ccf5aa9c32ad5c999656c5fb492c83e6`（0.2.18）；该身份输入与新构建源码是独立锁定的来源。
 - 官方 APK：[DiPlay-0.2.18.apk](https://github.com/shihabal3amri/DiPlay/releases/download/v0.2.18/DiPlay-0.2.18.apk)
 - 字节数：`18170831`
 - SHA-256：`e241457b36b21fe75b06b5682b4dcfc4fbc25cf75b1855c7a4d055129635ce8e`
 - 吉利应用包名：`io.github.xiaoshengwpp.diplay.geely`
-- 版本：`0.2.18-geely.2`；versionCode：`37002`
-- 版本仍以已审查的 0.2.18 为基线；吉利后续适配与部分 0.2.19 音频移植不等于全量同步 0.2.19。源码版本必须在处理任何身份或签名输入前与发布锁一致，否则立即失败。
+- 版本：`0.2.19-geely.1`；versionCode：`38001`
+- 源码版本必须在处理任何身份或签名输入前与发布锁一致，否则立即失败。身份输入仍保留原 0.2.18 APK 的 URL、长度和摘要，不随源码升级切换；未执行新源码的身份构建，不据此声称认证成功或实车可用。
 - ABI：`arm64-v8a`、`armeabi-v7a`、`x86_64`
 
 如官方替换资源或上述检查不一致，构建必须失败。不要删掉校验或改用“最新 APK”；先另行审查来源与锁定值。
@@ -98,7 +99,7 @@ keytool -list -v -keystore diplay-geely-release.p12 -alias diplay-geely-release
 
 ### 3. 下载并核对结果，再决定后续发布
 
-成功运行只上传三个文件：`DiPlay-0.2.18-geely.2.apk`、`SHA256SUMS.txt`、`build-manifest.json`。不上传松散身份文件、签名库、构建目录或原始日志包。
+成功运行只上传三个文件：`DiPlay-0.2.19-geely.1.apk`、`SHA256SUMS.txt`、`build-manifest.json`。不上传松散身份文件、签名库、构建目录或原始日志包。
 
 验证器先用 Android `apksigner verify` 验证 APK 签名，再记录公开签名证书 SHA-256 指纹；还核对包名、版本、固定源码提交、干净源码 checkout、恰好三 ABI、恰好两个预期身份条目、与本次提取的两文件逐字节一致及没有额外密钥文件。请把 manifest 中签名公指纹与你原有稳定签名的指纹比较；首次使用时自行保留公指纹作为以后升级的比较依据。它不证明签名库权属，也不证明身份获授权或车机认证成功。
 
@@ -120,4 +121,5 @@ python3 -m unittest discover -s scripts -p test_owner_release.py -v
 ```
 
 原有 `.github/workflows/android.yml` 会在 PR 上运行源码检查与该测试，再运行 `AGENTS.md` 要求的聚合 Gradle 检查。源 CI 通过也不意味着这个手动敏感工作流已跑过。本方案从未进行真实身份提取或签名构建，最终 APK 仍待 owner 步骤完成。
+
 

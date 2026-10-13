@@ -1,6 +1,6 @@
-# Build DiPlay Geely 0.2.18
+# Build DiPlay Geely 0.2.19-geely.1
 
-This review candidate integrates official tag `v0.2.18` (`e8d23603ccf5aa9c32ad5c999656c5fb492c83e6`) on the validated Geely 0.2.16 baseline. Geely product changes are listed in [the integration review](GEELY-0.2.18-REVIEW.md). The official build entry remains `:mobile:assembleRelease`; this fork additionally refuses release builds without complete external authentication and signing inputs. No public GitHub release-upload workflow is supplied by the pinned official source.
+This source integrates official 0.2.19 and subsequent improvements through `c30d3f0df18dd132739d864a9e054c73b3d57d8c`, preserving the Geely adaptations reviewed in [PR #14](https://github.com/xiaoshengwpp/DiPlay-Geely/pull/14). The verified Geely source is `75d45016f7a0cba1b5d01050c517066ea245c218`, version `0.2.19-geely.1` / `38001`. The official build entry remains `:mobile:assembleRelease`; this fork refuses release builds without complete external authentication and signing inputs. The [owner-controlled build](OWNER-CLOUD-RELEASE.md) retains the separately locked official 0.2.18 APK input; updating source does not switch that input, execute an identity build, or establish CarPlay authentication or vehicle compatibility. No automatic public release-upload workflow is supplied.
 
 Source-only validation outputs are unsigned and contain no accessory identity. They are not installable standalone CarPlay deliveries. Do not publish them as the finished Geely release.
 
@@ -192,3 +192,4 @@ The pinned official repository exposes source-check CI, not an authenticated ful
 | Source APK cannot start standalone CarPlay | Supply runtime authentication assets. Use `:mobile:assembleStandaloneDebug`. |
 | Standalone task reports missing authentication files | Check the external directory path and both required files. |
 | Android rejects an app update | Use the same application ID and signing key as the installed app. |
+
