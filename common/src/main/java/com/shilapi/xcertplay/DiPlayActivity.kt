@@ -1584,7 +1584,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             choice(card, getString(R.string.settings_geely_siri_source), listOf(
                 getString(R.string.settings_geely_auto), getString(R.string.settings_geely_standard),
                 getString(R.string.settings_geely_compatible)),
-                sources.indexOf(com.shilapi.xcertplay.media.SiriMicrophoneSettings.load(this)), reconnects = false) {
+                sources.indexOf(com.shilapi.xcertplay.media.SiriMicrophoneSettings.load(this)), reconnects = false, growForText = true) {
                 com.shilapi.xcertplay.media.SiriMicrophoneSettings.save(this, sources[it])
             }
             card.addView(label(getString(R.string.settings_geely_siri_description), 14, MUTED))
@@ -1594,7 +1594,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 "${it.displayId}: ${it.name} (${it.width} × ${it.height})"
             }
             choice(card, getString(R.string.settings_geely_hud_display), options,
-                (displays.indexOfFirst { it.displayId == selected } + 1).coerceAtLeast(0), reconnects = false) {
+                (displays.indexOfFirst { it.displayId == selected } + 1).coerceAtLeast(0), reconnects = false, growForText = true) {
                 if (it == 0) GeelyHudSelection.clear()
                 else if (!GeelyHudSelection.select(this, displays[it - 1].displayId)) {
                     toast(getString(R.string.settings_geely_hud_unavailable))
@@ -5627,7 +5627,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
     // [announcesReconnect] labels a choice whose [save] reconnects by itself.
     private fun choice(parent: LinearLayout, title: String, options: List<String>, current: Int, reconnects: Boolean = true,
-        announcesReconnect: Boolean = reconnects, enabled: Boolean = true, save: (Int) -> Unit) {
+        announcesReconnect: Boolean = reconnects, enabled: Boolean = true, growForText: Boolean = false, save: (Int) -> Unit) {
         var selection = current
         val button = button("$title · ${options[selection]}", false) {}.apply { isEnabled = enabled }
         button.setOnClickListener {
@@ -5645,7 +5645,14 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                     }
                 }.setNegativeButton(getString(R.string.cancel), null).show()
         }
-        parent.addView(button, matchButton(0, 60)); parent.addView(space(12))
+        val params = matchButton(0, SETTINGS_CHOICE_MIN_HEIGHT_DP)
+        if (growForText) {
+            params.height = ViewGroup.LayoutParams.WRAP_CONTENT
+            button.minHeight = dp(SETTINGS_CHOICE_MIN_HEIGHT_DP)
+            button.setPaddingRelative(button.paddingStart, dp(SETTINGS_CHOICE_TEXT_INSET_DP),
+                button.paddingEnd, dp(SETTINGS_CHOICE_TEXT_INSET_DP))
+        }
+        parent.addView(button, params); parent.addView(space(12))
     }
     private fun card() = column().apply { background = rounded(SURFACE, BORDER); setPadding(dp(24), dp(24), dp(24), dp(24)) }
     private fun column() = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; layoutParams = LinearLayout.LayoutParams(-1, -2) }
@@ -6018,5 +6025,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         private const val NOTE_LINE_GAP_DP = 4
         private const val NOTE_ATTACH_GAP_DP = 6
         private const val SETTINGS_BLOCK_GAP_DP = 16
+        private const val SETTINGS_CHOICE_MIN_HEIGHT_DP = 60
+        private const val SETTINGS_CHOICE_TEXT_INSET_DP = 8
     }
 }

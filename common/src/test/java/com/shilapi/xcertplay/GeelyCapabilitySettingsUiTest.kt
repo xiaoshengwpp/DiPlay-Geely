@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.shilapi.xcertplay.host.R
@@ -49,6 +50,12 @@ class GeelyCapabilitySettingsUiTest {
                 assertTrue(texts.any { it.text.toString().contains(activity.getString(R.string.settings_geely_siri_source)) })
                 assertTrue(texts.any { it.text.toString().contains(activity.getString(R.string.settings_geely_hud_display)) })
                 assertTrue(content.height > 0)
+                texts.filterIsInstance<Button>().forEach { button ->
+                    val layout = requireNotNull(button.layout)
+                    assertTrue("Choice label must not clip at large font scale: ${button.text}",
+                        layout.getLineBottom(layout.lineCount - 1) <=
+                            button.height - button.compoundPaddingTop - button.compoundPaddingBottom)
+                }
                 descendants(content).forEach { assertTrue("Control width must fit its window", it.width <= width) }
                 val bitmap = Bitmap.createBitmap(width, content.height, Bitmap.Config.ARGB_8888)
                 content.draw(Canvas(bitmap))

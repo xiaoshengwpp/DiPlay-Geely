@@ -48,7 +48,7 @@ class SiriMediaSourceContractTest(unittest.TestCase):
         send = text.split('    private fun send(', 1)[1].split('    internal fun onForegroundMediaKey', 1)[0]
         for guard in ('active !== expectedController', '!stillCurrent()', 'active.activeAirPlaySessionToken() ?: return false',
                       'inCall(context) || AirPlayPersistence.loadCarBluetoothAudio(context)', 'mediaDispatch.shouldSend('):
-            self.assertLess(send.index(guard), send.index('active.sendMediaButton(index)'))
+            self.assertLess(send.index(guard), send.index('active.sendMediaButton(index, token)'))
         for route in ('FOREGROUND', 'MEDIA_SESSION', 'MEDIA_CONTROLLER', 'GEELY_PRIVATE'):
             self.assertIn('CarPlayMediaInputRoute.' + route, text)
         self.assertIn('if (sent) mediaDispatch.record(', text)
@@ -75,9 +75,19 @@ class SiriMediaSourceContractTest(unittest.TestCase):
     def test_private_siri_rejects_retired_session_and_calls(self):
         text = (COMMON / 'CarPlayMediaKeys.kt').read_text()
         body = text.split('internal fun onExternalSiriKey(', 1)[1].split('    private val callback', 1)[0]
-        for guard in ('active !== expectedController', 'active.activeAirPlaySessionToken() == null', '!stillCurrent()', 'inCall(context)'):
-            self.assertLess(body.index(guard), body.index('active.requestSiri()'))
+        for guard in ('active !== expectedController', 'active.activeAirPlaySessionToken() ?: return false', '!stillCurrent()', 'inCall(context)'):
+            self.assertLess(body.index(guard), body.index('active.requestSiri(token)'))
         self.assertNotIn('loadCarBluetoothAudio', body)
+        self.assertIn('controller === active && stillCurrent() && !inCall(context)', body)
+
+    def test_controller_revalidates_session_token_and_owner_inside_command_queue(self):
+        text = (SHARED / 'orchestration/CarPlayController.kt').read_text()
+        body = text.split('private fun enqueueWheelCommand(', 1)[1].split('    override fun close()', 1)[0]
+        self.assertIn('expectedToken != null && token !== expectedToken', body)
+        queued = body.split('touchExecutor.execute {', 1)[1]
+        for guard in ('executionAllowed', '!closed', '!session.isClosed', 'activeSession === session',
+                      'session.mainScreenSessionToken() === token'):
+            self.assertLess(queued.index(guard), queued.index('command(session)'))
 
 if __name__ == '__main__':
     unittest.main()

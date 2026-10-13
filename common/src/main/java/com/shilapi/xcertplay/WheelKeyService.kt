@@ -506,7 +506,7 @@ class WheelKeyService : AccessibilityService() {
 // CarPlay's iAP2 call state can be active even when the head unit leaves Android's mode normal.
 // Native Bluetooth calls also use a call/communication audio mode.
 internal fun inCall(context: Context): Boolean =
-    BydNavigationOutputs.carPlayCall() != null ||
+    com.shilapi.xcertplay.orchestration.CarPlayCallGuard.inCall() ||
         (context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager)?.mode.let { it != null && it != AudioManager.MODE_NORMAL }
 
 /** Use the input-device ID for a held press; saved assignments still use the stable device name. */

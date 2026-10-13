@@ -260,8 +260,8 @@ class GeelyWheelKeysLifecycleTest {
         listener.onLongPressTriggered(GeelyWheelKeyCodes.KEY_VOICE_ASSIST, 0)
         idle()
         assertEquals(vendor.registrations, vendor.unregistered)
-        verify(controller, never()).sendMediaButton(anyInt())
-        verify(controller, never()).requestSiri()
+        verify(controller, never()).sendMediaButton(anyInt(), any(), any())
+        verify(controller, never()).requestSiri(any(), any())
     }
 
     @Test fun oldBindingCallbacksAndListenersCannotAffectAReplacementController() {
@@ -281,14 +281,14 @@ class GeelyWheelKeysLifecycleTest {
         oldListener.onLongPressTriggered(GeelyWheelKeyCodes.KEY_VOICE_ASSIST, 0)
         idle()
         advanceRetry()
-        verify(firstOwner, never()).sendMediaButton(anyInt())
-        verify(firstOwner, never()).requestSiri()
-        verify(nextOwner, never()).sendMediaButton(anyInt())
-        verify(nextOwner, never()).requestSiri()
+        verify(firstOwner, never()).sendMediaButton(anyInt(), any(), any())
+        verify(firstOwner, never()).requestSiri(any(), any())
+        verify(nextOwner, never()).sendMediaButton(anyInt(), any(), any())
+        verify(nextOwner, never()).requestSiri(any(), any())
         assertEquals(2, context.connections.size)
         nextVendor.registrations.single().onShortClick(GeelyWheelKeyCodes.KEY_NEXT, 0)
         idle()
-        verify(nextOwner).sendMediaButton(CarPlayMediaButton.NEXT)
+        verify(nextOwner).sendMediaButton(eq(CarPlayMediaButton.NEXT), any(), any())
     }
 
     @Test fun stoppedListenerCannotDispatchAfterSameControllerRestarts() {
@@ -306,8 +306,8 @@ class GeelyWheelKeysLifecycleTest {
         oldListener.onShortClick(GeelyWheelKeyCodes.KEY_PLAY_PAUSE, 0)
         oldListener.onLongPressTriggered(GeelyWheelKeyCodes.KEY_VOICE_ASSIST, 0)
         idle()
-        verify(controller, never()).sendMediaButton(anyInt())
-        verify(controller, never()).requestSiri()
+        verify(controller, never()).sendMediaButton(anyInt(), any(), any())
+        verify(controller, never()).requestSiri(any(), any())
     }
 
     @Test @Config(sdk = [25, 28, 30, 33]) fun queuedCallbacksCannotTransferToANewSessionOnTheSameController() {
@@ -321,14 +321,14 @@ class GeelyWheelKeysLifecycleTest {
         // The binding and controller remain current, but their phone session has changed.
         `when`(controller.activeAirPlaySessionToken()).thenReturn(Any())
         idle()
-        verify(controller, never()).sendMediaButton(anyInt())
-        verify(controller, never()).requestSiri()
+        verify(controller, never()).sendMediaButton(anyInt(), any(), any())
+        verify(controller, never()).requestSiri(any(), any())
         // New callbacks from the unchanged binding must still work for the replacement session.
         listener.onShortClick(GeelyWheelKeyCodes.KEY_NEXT, 0)
         listener.onLongPressTriggered(GeelyWheelKeyCodes.KEY_VOICE_ASSIST, 0)
         idle()
-        verify(controller).sendMediaButton(CarPlayMediaButton.NEXT)
-        verify(controller).requestSiri()
+        verify(controller).sendMediaButton(eq(CarPlayMediaButton.NEXT), any(), any())
+        verify(controller).requestSiri(any(), any())
         assertEquals(1, context.connections.size)
     }
 
@@ -343,13 +343,13 @@ class GeelyWheelKeysLifecycleTest {
         listener.onLongPressTriggered(GeelyWheelKeyCodes.KEY_VOICE_ASSIST, 0)
         `when`(controller.activeAirPlaySessionToken()).thenReturn(Any())
         idle()
-        verify(controller, never()).sendMediaButton(anyInt())
-        verify(controller, never()).requestSiri()
+        verify(controller, never()).sendMediaButton(anyInt(), any(), any())
+        verify(controller, never()).requestSiri(any(), any())
         listener.onShortClick(GeelyWheelKeyCodes.KEY_PLAY_PAUSE, 0)
         listener.onLongPressTriggered(GeelyWheelKeyCodes.KEY_VOICE_ASSIST, 0)
         idle()
-        verify(controller).sendMediaButton(CarPlayMediaButton.PLAY_PAUSE)
-        verify(controller).requestSiri()
+        verify(controller).sendMediaButton(eq(CarPlayMediaButton.PLAY_PAUSE), any(), any())
+        verify(controller).requestSiri(any(), any())
     }
 
     @Test fun avrCpRegistersOnlyVoiceAndChangingAudioPreferenceCannotDoubleFire() {
@@ -363,8 +363,8 @@ class GeelyWheelKeysLifecycleTest {
         listener.onShortClick(GeelyWheelKeyCodes.KEY_NEXT, 0)
         listener.onLongPressTriggered(GeelyWheelKeyCodes.KEY_VOICE_ASSIST, 0)
         idle()
-        verify(controller, never()).sendMediaButton(anyInt())
-        verify(controller).requestSiri()
+        verify(controller, never()).sendMediaButton(anyInt(), any(), any())
+        verify(controller).requestSiri(any(), any())
         AirPlayPersistence.saveCarBluetoothAudio(context, false)
         GeelyWheelKeys.stop()
         GeelyWheelKeys.start(context, controller)
@@ -376,15 +376,15 @@ class GeelyWheelKeysLifecycleTest {
         AirPlayPersistence.saveCarBluetoothAudio(context, true)
         mediaVendor.registrations.single().onShortClick(GeelyWheelKeyCodes.KEY_NEXT, 0)
         idle()
-        verify(controller, never()).sendMediaButton(anyInt())
+        verify(controller, never()).sendMediaButton(anyInt(), any(), any())
     }
 
     private fun owner(): CarPlayController = mock(CarPlayController::class.java).also(owners::add)
     private fun attach(): CarPlayController = owner().also {
         `when`(it.nowPlayingSnapshot()).thenReturn(CarPlayNowPlaying())
         `when`(it.activeAirPlaySessionToken()).thenReturn(Any())
-        `when`(it.sendMediaButton(anyInt())).thenReturn(true)
-        `when`(it.requestSiri()).thenReturn(true)
+        `when`(it.sendMediaButton(anyInt(), any(), any())).thenReturn(true)
+        `when`(it.requestSiri(any(), any())).thenReturn(true)
         CarPlayMediaKeys.attach(context, it)
         idle()
     }

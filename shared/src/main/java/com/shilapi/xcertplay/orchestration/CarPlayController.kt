@@ -314,10 +314,21 @@ class CarPlayController(
         }
     }
 
+    private val callStateLock = Any()
+
     private val sessionListener = object : AirPlaySessionListener {
         override fun onSessionActive(session: AirPlaySession) {
-            val replacement = activeSession !== session
+            val (replacement, replacingConnectedSession) = synchronized(callStateLock) {
+                if (closed) return
+                val changed = activeSession !== session
+                val replacing = changed && activeSession != null
+                activeSession = session
+                CarPlayCallGuard.start(this@CarPlayController, session)
+                changed to replacing
+            }
             if (replacement) {
+                // Replacing a live phone also expires temporary per-session HUD consent.
+                if (replacingConnectedSession) com.shilapi.xcertplay.glance.CarPlayGlance.setConnected(false)
                 BydNavigationOutputs.start(appContext)
                 BydNavigationOutputs.carPlaySessionStarted()
                 com.shilapi.xcertplay.glance.CarPlayGlance.setConnected(true)
@@ -327,7 +338,6 @@ class CarPlayController(
                     debugLog("video in car session allowed=${VideoInCar.allowed} delivery=$delivery")
                 }
             }
-            activeSession = session
             val btPrefs = appContext.getSharedPreferences("xcertplay_airplay", android.content.Context.MODE_PRIVATE)
             if (btPrefs.getBoolean("bt_suspend_during_carplay", false)) {
                 // close() marks [closed], and a closing session marks itself before onSessionEnded
@@ -345,8 +355,14 @@ class CarPlayController(
         }
 
         override fun onSessionEnded(session: AirPlaySession) {
-            if (activeSession === session) {
-                activeSession = null
+            val ended = synchronized(callStateLock) {
+                if (activeSession !== session) false else {
+                    activeSession = null
+                    CarPlayCallGuard.end(this@CarPlayController, session)
+                    true
+                }
+            }
+            if (ended) {
                 synchronized(albumReplayLock) { initialArtworkReplay = null }
                 BydNavigationOutputs.endNow(preserveTurnOverlay = !closed && config.transport == CarPlayTransport.WIRELESS)
                 BydBluetoothSuspend.resume(appContext, this@CarPlayController)
@@ -587,16 +603,13 @@ class CarPlayController(
     }
 
     /** Opens Siri on the iPhone, as the car's voice button does in CarPlay. */
-    fun requestSiri(): Boolean {
-        if (closed) return false
-        val session = activeSession ?: return false
-        return try {
-            touchExecutor.execute { session.invokeSiri() }
-            true
-        } catch (_: Exception) {
-            false
-        }
-    }
+    fun requestSiri(): Boolean = requestSiri(expectedToken = null)
+
+    /** A wheel callback can retain its primary-stream owner through the command executor queue. */
+    fun requestSiri(expectedToken: Any?): Boolean = requestSiri(expectedToken, executionAllowed = null)
+
+    fun requestSiri(expectedToken: Any?, executionAllowed: (() -> Boolean)?): Boolean =
+        enqueueWheelCommand(expectedToken, executionAllowed) { it.invokeSiri() }
 
     /** Answers the ringing call on the iPhone (telephony Hook Switch), as the wheel's call button does. */
     fun answerCall(): Boolean = sendTelephony(TELEPHONY_HOOK_SWITCH)
@@ -615,11 +628,35 @@ class CarPlayController(
         }
     }
 
-    fun sendMediaButton(index: Int): Boolean {
+    fun sendMediaButton(index: Int): Boolean = sendMediaButton(index, expectedToken = null)
+
+    fun sendMediaButton(index: Int, expectedToken: Any?): Boolean =
+        sendMediaButton(index, expectedToken, executionAllowed = null)
+
+    fun sendMediaButton(index: Int, expectedToken: Any?, executionAllowed: (() -> Boolean)?): Boolean =
+        enqueueWheelCommand(expectedToken, executionAllowed) { it.sendMedia(index) }
+
+    /**
+     * Legacy callers retain their current acceptance behavior, including a session without a primary
+     * stream. All commands still belong to the captured session and primary-stream generation;
+     * callers supplying a token additionally require that exact owner before enqueueing.
+     */
+    private fun enqueueWheelCommand(expectedToken: Any?, executionAllowed: (() -> Boolean)?,
+        command: (AirPlaySession) -> Unit): Boolean {
         if (closed) return false
         val session = activeSession ?: return false
+        val token = session.mainScreenSessionToken()
+        if (expectedToken != null && token !== expectedToken) return false
+        // This predicate runs without controller locks, so callers may check their ownership lock.
+        if (executionAllowed != null && !executionAllowed()) return false
+        if (closed || session.isClosed || activeSession !== session || session.mainScreenSessionToken() !== token) return false
         return try {
-            touchExecutor.execute { session.sendMedia(index) }
+            touchExecutor.execute {
+                if ((executionAllowed == null || executionAllowed()) && !closed && !session.isClosed &&
+                    activeSession === session && session.mainScreenSessionToken() === token) {
+                    command(session)
+                }
+            }
             true
         } catch (_: Exception) {
             false
@@ -634,6 +671,7 @@ class CarPlayController(
             wirelessGeneration.incrementAndGet()
             dashboardMapOutputVisible = false
         }
+        synchronized(callStateLock) { CarPlayCallGuard.end(this) }
         firstTcpWatchdog?.terminate()
         BydBluetoothSuspend.resume(appContext, this)
         startupTimer.shutdownNow()
@@ -781,7 +819,14 @@ class CarPlayController(
     }
 
     // HUD (SOME/IP) and cluster (AMap broadcast) keep separate state so one failing cannot stall the other.
-    private fun onRouteFrame(frame: com.shilapi.xcertplay.iap2.wire.Iap2Frame) {
+    private fun onRouteFrame(
+        frame: com.shilapi.xcertplay.iap2.wire.Iap2Frame,
+        currentChannel: () -> Boolean,
+    ) {
+        synchronized(callStateLock) {
+            if (closed || !currentChannel()) return
+            activeSession?.let { CarPlayCallGuard.accept(this, it, frame) }
+        }
         BydNavigationOutputs.onFrame(frame)
         com.shilapi.xcertplay.glance.CarPlayGlance.onFrame(frame)
         synchronized(playbackStatus) {
@@ -1504,7 +1549,9 @@ class CarPlayController(
                 keepAliveAfterDeadline = { keepBluetoothControlAlive(generation) },
                 beforeStartSession = { startedHotspot?.validateReady() },
                 onStartSessionSent = { watchdog.startSessionSent(it.sentAtNanos) },
-                onIncoming = ::onRouteFrame,
+                onIncoming = { frame -> onRouteFrame(frame) {
+                    !isStaleWirelessRun(generation) && csm === channel && wirelessTunnelChannel == null
+                } },
                 onProgress = { message ->
                     diagnostics.controlProgress(message)
                     debugLog(message)
@@ -1605,7 +1652,9 @@ class CarPlayController(
                         onReady = {
                             onWirelessTunnelReady(generation)
                         },
-                        onIncoming = ::onRouteFrame,
+                        onIncoming = { frame -> onRouteFrame(frame) {
+                            generation == wirelessGeneration.get() && wirelessTunnelChannel === channel
+                        } },
                         onProgress = { message -> debugLog("iAP tunnel $message") },
                     )
                     if (closed || generation != wirelessGeneration.get()) return@execute
@@ -2162,7 +2211,7 @@ class CarPlayController(
                 timeoutMillis = controlLoopTimeoutMillis(),
                 locationProvider = locationProvider,
                 vehicleStatusProvider = vehicleStatusProvider,
-                onIncoming = ::onRouteFrame,
+                onIncoming = { frame -> onRouteFrame(frame) { this.csm === csm } },
                 onProgress = { message -> debugLog("wired $message") },
             )
             onStatus(

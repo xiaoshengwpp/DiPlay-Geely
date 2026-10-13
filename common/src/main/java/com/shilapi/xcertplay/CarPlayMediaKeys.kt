@@ -408,7 +408,12 @@ internal object CarPlayMediaKeys {
             Log.i(TAG, "media key $source -> car video player $index")
             true
         } else {
-            active.sendMediaButton(index).also {
+            active.sendMediaButton(index, token) {
+                synchronized(this) {
+                    controller === active && stillCurrent() && !inCall(context) &&
+                        !AirPlayPersistence.loadCarBluetoothAudio(context)
+                }
+            }.also {
                 Log.i(TAG, "media key $source -> CarPlay $index sent=$it")
             }
         }
@@ -428,9 +433,14 @@ internal object CarPlayMediaKeys {
     internal fun onExternalSiriKey(expectedController: CarPlayController, stillCurrent: () -> Boolean): Boolean {
         val active = controller ?: return false
         val context = appContext ?: return false
-        if (active !== expectedController || active.activeAirPlaySessionToken() == null ||
+        val token = active.activeAirPlaySessionToken() ?: return false
+        if (active !== expectedController ||
             !stillCurrent() || inCall(context)) return false
-        return runCatching { active.requestSiri() }.getOrDefault(false)
+        return runCatching {
+            active.requestSiri(token) {
+                synchronized(this) { controller === active && stillCurrent() && !inCall(context) }
+            }
+        }.getOrDefault(false)
     }
 
     private val callback = CarPlayMediaCallback(

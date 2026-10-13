@@ -120,11 +120,12 @@ internal object GeelyWheelKeys {
     }.getOrDefault(false)
 
     private class InputConnection(val session: Session) : ServiceConnection {
-        // These fields are only accessed on the main handler.
+        // Lifecycle fields are main-handler owned; subscribed also has command-thread readers.
         var bound = false
         var manager: IInputManager? = null
         var listener: IInputListener? = null
-        var subscribed = false
+        // Also checked by the command-executor ownership predicate after main-thread dispatch.
+        @Volatile var subscribed = false
         var codes = intArrayOf()
 
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
