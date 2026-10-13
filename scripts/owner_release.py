@@ -10,16 +10,18 @@ import stat
 import subprocess
 import zipfile
 
+from geely_version import read_version
+
 LOCK = {
     "source_repository": "xiaoshengwpp/DiPlay-Geely",
-    "source_commit": "dca9e36b555cf6ebba041f8abbe72aaed0aab227",
+    "source_commit": "2c0de42807458e80482bfff719936b957c069819",
     "upstream_source_commit": "e8d23603ccf5aa9c32ad5c999656c5fb492c83e6",
     "official_apk_url": "https://github.com/shihabal3amri/DiPlay/releases/download/v0.2.18/DiPlay-0.2.18.apk",
     "official_apk_bytes": 18170831,
     "official_apk_sha256": "e241457b36b21fe75b06b5682b4dcfc4fbc25cf75b1855c7a4d055129635ce8e",
     "application_id": "io.github.xiaoshengwpp.diplay.geely",
-    "version_name": "0.2.18-geely.1",
-    "version_code": "37001",
+    "version_name": "0.2.18-geely.2",
+    "version_code": "37002",
     "abis": ["arm64-v8a", "armeabi-v7a", "x86_64"],
 }
 ASSETS = ("assets/offline-mfi/identity.pk8", "assets/offline-mfi/certificate.p7b")
@@ -120,6 +122,9 @@ def check_source(source):
     commit = subprocess.check_output(["git", "-C", str(source), "rev-parse", "HEAD"], text=True).strip()
     require(commit == LOCK["source_commit"], "Source commit mismatch")
     require(not subprocess.check_output(["git", "-C", str(source), "status", "--porcelain"], text=True).strip(), "Source checkout is modified")
+    version = read_version(source / "gradle/geely-version.properties")
+    require((version["versionName"], str(version["versionCode"])) ==
+            (LOCK["version_name"], LOCK["version_code"]), "Source version mismatch")
 
 
 def verify(apk, source, runtime_dir, aapt, apksigner, output):
@@ -144,7 +149,7 @@ def verify(apk, source, runtime_dir, aapt, apksigner, output):
     require(not output.exists(), "Output directory must not exist")
     output.mkdir(mode=0o700, parents=True)
     import shutil
-    target = output / "DiPlay-0.2.18-geely.1.apk"
+    target = output / "DiPlay-0.2.18-geely.2.apk"
     shutil.copyfile(apk, target)
     checksum = sha256(target)
     (output / "SHA256SUMS.txt").write_text(f"{checksum}  {target.name}\n")
@@ -177,3 +182,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
