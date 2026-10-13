@@ -59,8 +59,11 @@ class CarPlayGlanceTest {
         assertNull(CarPlayGlance.snapshot().maneuverType)
         assertEquals("Podcast", CarPlayGlance.snapshot().song)
 
+        val previousEpoch = CarPlayGlance.snapshot().disconnectEpoch
         CarPlayGlance.setConnected(false)
-        assertEquals(CarPlayGlance.Snapshot(), CarPlayGlance.snapshot())
+        assertEquals(CarPlayGlance.Snapshot(disconnectEpoch = previousEpoch + 1), CarPlayGlance.snapshot())
+        CarPlayGlance.setConnected(false)
+        assertEquals(previousEpoch + 1, CarPlayGlance.snapshot().disconnectEpoch)
     }
 
     @Test
