@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""0.2.16 product contracts; runtime no-side-effect coverage is in the JVM suites."""
+"""Geely adapter availability and disabled OEM product boundaries; JVM suites test runtime effects."""
 from pathlib import Path
 import re
 import unittest
@@ -8,12 +8,18 @@ ROOT = Path(__file__).resolve().parents[1]
 S = ROOT / 'shared/src/main/java/com/shilapi/xcertplay'
 A = '{http://schemas.android.com/apk/res/android}'
 class GeelyBoundaryContract(unittest.TestCase):
-    def test_vendor_policy_is_immutable_and_cannot_enable_saved_features(self):
+    def test_unsupported_vendor_policy_is_immutable_and_cannot_enable_saved_features(self):
         text = (S / 'hud/GeelyVendorPolicy.kt').read_text()
         for field in ('bydNavigation','bydCluster','bydClusterSong','launcherMapSharing',
                       'bydBattery','bydWheelSpeed','videoWhileParked','bydAdb',
-                      'bydDiagnostics','bydTyres','bydAmbientLamp','upstreamApkUpdates'):
+                      'bydDiagnostics','bydTyres','bydAmbientLamp','upstreamApkUpdates',
+                      'phoneAudioRoute','fceCluster'):
             self.assertRegex(text, rf'\bval {field}: Boolean = false\b')
+            self.assertNotRegex(text, rf'\bvar {field}\b')
+    def test_compiled_geely_adapters_are_available_without_claiming_runtime_support(self):
+        text = (S / 'hud/GeelyVendorPolicy.kt').read_text()
+        for field in ('geelyInput', 'geelyMicrophoneOverride', 'foregroundMediaKeys'):
+            self.assertRegex(text, rf'\bval {field}: Boolean = true\b')
             self.assertNotRegex(text, rf'\bvar {field}\b')
     def test_map_video_and_automatic_accessibility_are_disabled(self):
         app = ET.parse(ROOT/'common/src/main/AndroidManifest.xml').getroot().find('application')
@@ -51,5 +57,5 @@ class GeelyBoundaryContract(unittest.TestCase):
         from geely_version import read_version
         data=read_version()
         self.assertEqual((data['upstreamVersionName'],data['upstreamVersionCode'],data['versionName'],data['versionCode']),
-                         ('0.2.18',37,'0.2.18-geely.1',37001))
+                         ('0.2.18',37,'0.2.18-geely.2',37002))
 if __name__=='__main__':unittest.main()

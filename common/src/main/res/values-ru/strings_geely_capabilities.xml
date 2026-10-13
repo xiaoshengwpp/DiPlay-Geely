@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_geely_capabilities">Совместимость Geely (экспериментально)</string>
+    <string name="settings_geely_input">Ввод на неизвестном головном устройстве (экспериментально)</string>
+    <string name="settings_geely_input_description">Разрешить службу ввода Geely на непроверенном устройстве. Нужна доступная служба; применяется при следующем подключении CarPlay. Известное оборудование определяется автоматически.</string>
+    <string name="settings_geely_siri_source">Источник микрофона Siri (экспериментально)</string>
+    <string name="settings_geely_auto">Автоматически</string>
+    <string name="settings_geely_standard">Стандартный · распознавание речи</string>
+    <string name="settings_geely_compatible">Совместимый · голосовая связь</string>
+    <string name="settings_geely_siri_description">Применяется при следующем запросе Siri. Автоматический режим выбирает совместимый источник только для известного профиля оборудования. Микрофон телефонных звонков не меняется.</string>
+    <string name="settings_geely_hud_display">Экран навигации (экспериментально)</string>
+    <string name="settings_geely_hud_off">Выключено</string>
+    <string name="settings_geely_hud_unavailable">Этот экран больше недоступен.</string>
+    <string name="settings_geely_hud_description">Выберите доступный Android дополнительный экран вручную. Только подсказки навигации, без полной карты и протокола штатного HUD. Временный выбор сбрасывается при разрыве соединения или отключении экрана. Если экранов нет, интерфейс производителя недоступен приложению.</string>
+</resources>

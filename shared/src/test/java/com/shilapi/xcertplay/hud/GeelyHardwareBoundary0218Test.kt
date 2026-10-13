@@ -24,7 +24,7 @@ import org.robolectric.RuntimeEnvironment
 import org.robolectric.annotation.Config
 import org.robolectric.util.ReflectionHelpers
 
-/** New upstream facades must fail before contexts, vendor probes, callbacks, keys or workers. */
+/** Geely adapters are available; unrelated OEM facades still fail before any platform side effect. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29], manifest = Config.NONE)
 class GeelyHardwareBoundary0218Test {
@@ -36,12 +36,12 @@ class GeelyHardwareBoundary0218Test {
         override fun getSystemService(name: String): Any = error("vendor system service accessed")
     }
 
-    @Test fun newPolicyBoundariesAreIndependentlyDisabled() {
-        assertFalse(GeelyVendorPolicy.geelyInput)
-        assertFalse(GeelyVendorPolicy.geelyMicrophoneOverride)
+    @Test fun availableGeelyAdaptersDoNotEnableUnverifiedOemPhoneOrClusterBackends() {
+        assertTrue(GeelyVendorPolicy.geelyInput)
+        assertTrue(GeelyVendorPolicy.geelyMicrophoneOverride)
+        assertTrue(GeelyVendorPolicy.foregroundMediaKeys)
         assertFalse(GeelyVendorPolicy.phoneAudioRoute)
         assertFalse(GeelyVendorPolicy.fceCluster)
-        assertFalse(GeelyVendorPolicy.foregroundMediaKeys)
     }
 
     @Test fun importedPreferencesAndSetterCallsCannotEnablePhoneOrFceOutput() {
@@ -81,11 +81,13 @@ class GeelyHardwareBoundary0218Test {
             watcher.start()
             watcher.stop()
         }
-        assertLazyNotInitialized(PhoneAudioRoute, "executor")
         assertLazyNotInitialized(watcher, "audio")
         assertLazyNotInitialized(watcher, "handler")
-        assertNull(field(PhoneAudioRoute, "controller"))
-        assertNull(field(PhoneAudioRoute, "watcher"))
+        assertEquals(PhoneAudioRoute.Capability.NO_VERIFIED_GEELY_BACKEND, PhoneAudioRoute.capability())
+        val facadeFields = PhoneAudioRoute::class.java.declaredFields.map { it.name }
+        for (name in listOf("executor", "controller", "watcher")) {
+            assertFalse("disabled facade retains $name", facadeFields.any { it == name || it == name + "\$delegate" })
+        }
     }
 
     @Test fun telecomBackendAndDirectServiceCallbacksCannotCreateAnActiveCall() {
@@ -150,7 +152,7 @@ class GeelyHardwareBoundary0218Test {
         assertLazyNotInitialized(BydNavigationOutputs, "fceCluster")
     }
 
-    @Test fun geelyBuildIdentifiersCannotChangeSiriOrOtherMicrophoneSources() {
+    @Test fun brandLikeIdentifiersCannotEnableAutomaticSiriCompatibilityOrAlterCalls() {
         val names = listOf("PRODUCT", "DEVICE", "MODEL", "MANUFACTURER", "BRAND")
         val before = names.associateWith { Build::class.java.getField(it).get(null) }
         try {

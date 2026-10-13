@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_geely_capabilities">توافق Geely (تجريبي)</string>
+    <string name="settings_geely_input">إدخال وحدة غير معروفة (تجريبي)</string>
+    <string name="settings_geely_input_description">السماح بخدمة إدخال Geely على وحدة لم يتم التحقق منها. يتطلب خدمة يمكن الوصول إليها، ويطبق عند اتصال CarPlay التالي. يتم اكتشاف الأجهزة المعروفة تلقائيًا.</string>
+    <string name="settings_geely_siri_source">مصدر ميكروفون Siri (تجريبي)</string>
+    <string name="settings_geely_auto">تلقائي</string>
+    <string name="settings_geely_standard">قياسي · التعرف على الكلام</string>
+    <string name="settings_geely_compatible">متوافق · الاتصال الصوتي</string>
+    <string name="settings_geely_siri_description">يطبق عند طلب Siri التالي. يستخدم الوضع التلقائي المصدر المتوافق فقط لملف الأجهزة المعروف. لا يتغير ميكروفون المكالمات الهاتفية.</string>
+    <string name="settings_geely_hud_display">شاشة الملاحة (تجريبي)</string>
+    <string name="settings_geely_hud_off">إيقاف</string>
+    <string name="settings_geely_hud_unavailable">لم تعد هذه الشاشة متاحة.</string>
+    <string name="settings_geely_hud_description">اختر يدويًا شاشة ثانوية متاحة لتطبيق Android. إرشادات ملاحة فقط، دون خريطة كاملة أو بروتوكول HUD الأصلي. الاختيار مؤقت ويمسح عند قطع الاتصال أو إزالة الشاشة. إذا لم تظهر شاشة، فواجهة الشركة المصنعة غير متاحة للتطبيق.</string>
+</resources>

@@ -48,7 +48,7 @@ internal class PhoneAudioRouteController(
 ) {
     private val lock = Any()
     private val wanted = mutableSetOf<PhoneAudioReason>()
-    private var held = false // scheduler thread
+    @Volatile private var held = false // written on scheduler, observed by audio threads
     private var cancelRelease: (() -> Unit)? = null // scheduler thread
     @Volatile private var failedAt = NEVER
 
@@ -61,7 +61,10 @@ internal class PhoneAudioRouteController(
     fun settingsChanged() = evaluate()
 
     /** True while the CarPlay call's echo is left to the car, so DiPlay's own canceller must stay out of it. */
-    fun carPlayCallsUseCarAudio(): Boolean = enabled(PhoneAudioReason.CARPLAY_CALL) && !failedRecently()
+    fun carPlayCallsUseCarAudio(): Boolean =
+        enabled(PhoneAudioReason.CARPLAY_CALL) &&
+            synchronized(lock) { PhoneAudioReason.CARPLAY_CALL in wanted } &&
+            held && !failedRecently() && runCatching { backend.isActive() }.getOrDefault(false)
 
     private fun failedRecently(): Boolean = failedAt != NEVER && now() - failedAt < failureBackoffMillis
 
@@ -106,11 +109,18 @@ internal class PhoneAudioRouteController(
     }
 }
 
-/** No-op product facade. The independent controller above remains available for pure tests. */
+/**
+ * Ordinary CarPlay calls use the existing microphone/audio-mode path. The optional upstream Telecom
+ * backend was a BYD phone-state workaround, not a generic call implementation. No Geely backend has
+ * been verified; never pretend that a preference means the car DSP is active.
+ */
 object PhoneAudioRoute {
-    private val executor by lazy { Unit }
-    private var controller: PhoneAudioRouteController? = null
-    private var watcher: VoipCallWatcher? = null
+    enum class Capability { NO_VERIFIED_GEELY_BACKEND }
+    fun capability(): Capability = Capability.NO_VERIFIED_GEELY_BACKEND
+    fun capabilityReport(): String = "Optional OEM phone-state route=${capability()}; " +
+        "ordinary CarPlay call microphone/playback and application echo cancellation remain available. " +
+        "No Telecom connection, other-app call watcher or runtime permission grant is started."
+
     fun attach(context: Context) = Unit
     fun carPlayCall(active: Boolean) = Unit
     internal fun voipApp(active: Boolean) = Unit

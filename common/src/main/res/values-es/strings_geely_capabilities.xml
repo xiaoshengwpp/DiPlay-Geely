@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_geely_capabilities">Compatibilidad Geely (experimental)</string>
+    <string name="settings_geely_input">Puente de entrada para equipo desconocido (experimental)</string>
+    <string name="settings_geely_input_description">Permite el servicio de entrada Geely en un equipo no verificado. Requiere un servicio accesible; se aplica en la siguiente conexión CarPlay. El hardware conocido se detecta automáticamente.</string>
+    <string name="settings_geely_siri_source">Fuente del micrófono de Siri (experimental)</string>
+    <string name="settings_geely_auto">Automática</string>
+    <string name="settings_geely_standard">Estándar · reconocimiento de voz</string>
+    <string name="settings_geely_compatible">Compatible · comunicación de voz</string>
+    <string name="settings_geely_siri_description">Se aplica en la siguiente solicitud de Siri. El modo automático usa la fuente compatible solo para el perfil de hardware conocido. No cambia el micrófono de las llamadas.</string>
+    <string name="settings_geely_hud_display">Pantalla de navegación (experimental)</string>
+    <string name="settings_geely_hud_off">Desactivado</string>
+    <string name="settings_geely_hud_unavailable">Esta pantalla ya no está disponible.</string>
+    <string name="settings_geely_hud_description">Seleccione manualmente una pantalla secundaria visible para Android. Solo indicaciones de navegación; sin mapa completo ni protocolo HUD del fabricante. La selección temporal se borra al desconectar o retirar la pantalla. Si no aparece ninguna, la interfaz del fabricante no está expuesta a esta aplicación.</string>
+</resources>

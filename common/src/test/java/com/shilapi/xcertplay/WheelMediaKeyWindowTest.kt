@@ -8,8 +8,8 @@ import android.view.KeyEvent
 import com.shilapi.xcertplay.airplay.AirPlaySession
 import com.shilapi.xcertplay.airplay.CarPlayMediaButton
 import com.shilapi.xcertplay.hud.BydCarPlayCall
-import com.shilapi.xcertplay.hud.CarPlayCallState
-import com.shilapi.xcertplay.iap2.message.Iap2Messages
+import com.shilapi.xcertplay.media.CarPlayNowPlaying
+import org.robolectric.util.ReflectionHelpers
 import com.shilapi.xcertplay.orchestration.CarPlayController
 import java.util.concurrent.ExecutorService
 import org.junit.After
@@ -24,7 +24,7 @@ import org.robolectric.annotation.Config
 import org.robolectric.annotation.LooperMode
 
 /**
- * The unverified upstream foreground bridge is disabled in this Geely product.
+ * Standard foreground track keys work independently of the optional vendor-private bridge.
  *
  * This is the route that has to work when the wheel key service cannot be turned on — a head unit
  * with no ADB has no route to it — so the tests here drive `dispatchKeyEvent` directly rather than
@@ -47,11 +47,15 @@ class WheelMediaKeyWindowTest {
         // A session has to exist: outside one the wheel keeps the car's own action.
         controller = mock(CarPlayController::class.java)
         `when`(controller.sendMediaButton(anyInt())).thenReturn(true)
+        `when`(controller.activeAirPlaySessionToken()).thenReturn(Any())
+        `when`(controller.nowPlayingSnapshot()).thenReturn(CarPlayNowPlaying())
+        CarPlayMediaKeys.attach(host, controller)
         field("controller", controller)
         field("activeAirPlaySession", mock(AirPlaySession::class.java))
     }
 
     @After fun tearDown() {
+        CarPlayMediaKeys.detach(controller)
         for (name in listOf("teardownExecutor", "airPlayCommandExecutor")) {
             (host.javaClass.getDeclaredField(name).apply { isAccessible = true }.get(host) as ExecutorService).shutdownNow()
         }
@@ -62,26 +66,35 @@ class WheelMediaKeyWindowTest {
         host.getSharedPreferences("xcertplay_airplay", Context.MODE_PRIVATE).edit().clear().commit()
     }
 
-    @Test fun unverifiedWindowBridgeLeavesTrackKeysToTheMediaSession() {
-        assertFalse(host.dispatchKeyEvent(key(KeyEvent.KEYCODE_MEDIA_NEXT, true)))
-        verify(controller, never()).sendMediaButton(CarPlayMediaButton.NEXT)
-        assertFalse(host.dispatchKeyEvent(key(KeyEvent.KEYCODE_MEDIA_PREVIOUS, true)))
-        verify(controller, never()).sendMediaButton(CarPlayMediaButton.PREVIOUS)
+    @Test fun foregroundClaimsStandardTrackKeys() {
+        assertTrue(host.dispatchKeyEvent(key(KeyEvent.KEYCODE_MEDIA_NEXT, true)))
+        verify(controller).sendMediaButton(CarPlayMediaButton.NEXT)
+        assertTrue(host.dispatchKeyEvent(key(KeyEvent.KEYCODE_MEDIA_PREVIOUS, true)))
+        verify(controller).sendMediaButton(CarPlayMediaButton.PREVIOUS)
     }
 
-    @Test fun windowNeverDuplicatesMediaSessionDownRepeatOrUp() {
-        // BYD sends a tap as an instant down/up pair, and a hold as repeats. Either way CarPlay must
-        // see one press, and the release must not reach BYD's own player as an unpaired key.
-        assertFalse(host.dispatchKeyEvent(key(KeyEvent.KEYCODE_MEDIA_NEXT, true)))
-        assertFalse(host.dispatchKeyEvent(key(KeyEvent.KEYCODE_MEDIA_NEXT, true, repeat = 1)))
-        assertFalse(host.dispatchKeyEvent(key(KeyEvent.KEYCODE_MEDIA_NEXT, false)))
-        verify(controller, never()).sendMediaButton(anyInt())
-        val callback = CarPlayMediaCallback { index, _ -> controller.sendMediaButton(index); Unit }
+    @Test fun windowAndMediaSessionEchoSendOnlyOnce() {
+        assertTrue(host.dispatchKeyEvent(key(KeyEvent.KEYCODE_MEDIA_NEXT, true)))
+        assertTrue(host.dispatchKeyEvent(key(KeyEvent.KEYCODE_MEDIA_NEXT, true, repeat = 1)))
+        assertTrue(host.dispatchKeyEvent(key(KeyEvent.KEYCODE_MEDIA_NEXT, false)))
+        val callback = ReflectionHelpers.getField<CarPlayMediaCallback>(CarPlayMediaKeys, "callback")
         for (event in listOf(key(KeyEvent.KEYCODE_MEDIA_NEXT, true),
             key(KeyEvent.KEYCODE_MEDIA_NEXT, true, repeat = 1), key(KeyEvent.KEYCODE_MEDIA_NEXT, false))) {
             callback.onMediaButtonEvent(Intent(Intent.ACTION_MEDIA_BUTTON).putExtra(Intent.EXTRA_KEY_EVENT, event))
         }
+        assertTrue(CarPlayMediaKeys.onExternalMediaKey(CarPlayMediaButton.NEXT, controller) { true })
         verify(controller, times(1)).sendMediaButton(CarPlayMediaButton.NEXT)
+    }
+
+    @Test fun bluetoothAvrcpKeepsPriorityAcrossAllSoftwareRoutes() {
+        AirPlayPersistence.saveCarBluetoothAudio(host, true)
+        assertFalse(host.dispatchKeyEvent(key(KeyEvent.KEYCODE_MEDIA_NEXT, true)))
+        val callback = ReflectionHelpers.getField<CarPlayMediaCallback>(CarPlayMediaKeys, "callback")
+        assertFalse(callback.onMediaButtonEvent(Intent(Intent.ACTION_MEDIA_BUTTON)
+            .putExtra(Intent.EXTRA_KEY_EVENT, key(KeyEvent.KEYCODE_MEDIA_PREVIOUS, true))))
+        callback.onSkipToNext()
+        assertFalse(CarPlayMediaKeys.onExternalMediaKey(CarPlayMediaButton.NEXT, controller) { true })
+        verify(controller, never()).sendMediaButton(anyInt())
     }
 
     @Test fun theKeysKeepTheCarsOwnActionDuringACall() {
@@ -104,17 +117,68 @@ class WheelMediaKeyWindowTest {
         verify(controller, never()).sendMediaButton(anyInt())
     }
 
-    @Test fun interruptedWindowPressDoesNotCreateAnUnpairedCarPlayAction() {
-        assertFalse(host.dispatchKeyEvent(key(KeyEvent.KEYCODE_MEDIA_NEXT, true)))
+    @Test fun interruptedWindowPressConsumesItsReleaseWithoutSendingAgain() {
+        assertTrue(host.dispatchKeyEvent(key(KeyEvent.KEYCODE_MEDIA_NEXT, true)))
         field("activeAirPlaySession", null)
         host.getSystemService(AudioManager::class.java).mode = AudioManager.MODE_IN_COMMUNICATION
-        assertFalse(host.dispatchKeyEvent(key(KeyEvent.KEYCODE_MEDIA_NEXT, false)))
-        field("activeAirPlaySession", mock(AirPlaySession::class.java))
-        host.getSystemService(AudioManager::class.java).mode = AudioManager.MODE_NORMAL
-        `when`(controller.sendMediaButton(anyInt())).thenReturn(false)
-        assertFalse(host.dispatchKeyEvent(key(KeyEvent.KEYCODE_MEDIA_NEXT, true)))
-        assertFalse(host.dispatchKeyEvent(key(KeyEvent.KEYCODE_MEDIA_NEXT, false)))
+        assertTrue(host.dispatchKeyEvent(key(KeyEvent.KEYCODE_MEDIA_NEXT, false)))
+        verify(controller, times(1)).sendMediaButton(CarPlayMediaButton.NEXT)
+    }
+
+    @Test fun aFailedSendDoesNotSwallowAnotherRoutesWorkingFallback() {
+        `when`(controller.sendMediaButton(anyInt())).thenReturn(false, true)
+        assertTrue(host.dispatchKeyEvent(key(KeyEvent.KEYCODE_MEDIA_NEXT, true)))
+        assertTrue(host.dispatchKeyEvent(key(KeyEvent.KEYCODE_MEDIA_NEXT, false)))
+        assertTrue(CarPlayMediaKeys.onExternalMediaKey(CarPlayMediaButton.NEXT, controller) { true })
+        verify(controller, times(2)).sendMediaButton(CarPlayMediaButton.NEXT)
+    }
+
+    @Test fun staleOrInactiveControllersCannotReceiveExternalMediaOrSiri() {
+        val stale = mock(CarPlayController::class.java)
+        assertFalse(CarPlayMediaKeys.onExternalMediaKey(CarPlayMediaButton.NEXT, stale) { true })
+        assertFalse(CarPlayMediaKeys.onExternalSiriKey(stale) { true })
+        assertFalse(CarPlayMediaKeys.onExternalMediaKey(CarPlayMediaButton.NEXT, controller) { false })
+        assertFalse(CarPlayMediaKeys.onExternalSiriKey(controller) { false })
+        `when`(controller.activeAirPlaySessionToken()).thenReturn(null)
+        assertFalse(CarPlayMediaKeys.onExternalMediaKey(CarPlayMediaButton.NEXT, controller) { true })
+        assertFalse(CarPlayMediaKeys.onExternalSiriKey(controller) { true })
         verify(controller, never()).sendMediaButton(anyInt())
+        verify(controller, never()).requestSiri()
+    }
+
+    @Test fun callsBlockMediaSessionPrivateMediaAndPrivateSiri() {
+        host.getSystemService(AudioManager::class.java).mode = AudioManager.MODE_IN_CALL
+        val callback = ReflectionHelpers.getField<CarPlayMediaCallback>(CarPlayMediaKeys, "callback")
+        callback.onSkipToNext()
+        assertFalse(CarPlayMediaKeys.onExternalMediaKey(CarPlayMediaButton.NEXT, controller) { true })
+        assertFalse(CarPlayMediaKeys.onExternalSiriKey(controller) { true })
+        verify(controller, never()).sendMediaButton(anyInt())
+        verify(controller, never()).requestSiri()
+    }
+
+    @Test fun legacySiriDoesNotClaimNewPressesOutsideSessionOrDuringCall() {
+        field("activeAirPlaySession", null)
+        assertFalse(host.dispatchKeyEvent(key(KeyEvent.KEYCODE_VOICE_ASSIST, true)))
+        assertFalse(host.dispatchKeyEvent(key(KeyEvent.KEYCODE_VOICE_ASSIST, false)))
+        field("activeAirPlaySession", mock(AirPlaySession::class.java))
+        host.getSystemService(AudioManager::class.java).mode = AudioManager.MODE_IN_CALL
+        assertFalse(host.dispatchKeyEvent(key(KeyEvent.KEYCODE_VOICE_ASSIST, true)))
+        assertFalse(host.dispatchKeyEvent(key(KeyEvent.KEYCODE_VOICE_ASSIST, false)))
+        verify(controller, never()).requestSiri()
+    }
+
+    @Test fun ownedLegacySiriReleaseIsConsumedButDoesNotInterruptANewCall() {
+        assertTrue(host.dispatchKeyEvent(key(KeyEvent.KEYCODE_VOICE_ASSIST, true)))
+        host.getSystemService(AudioManager::class.java).mode = AudioManager.MODE_IN_COMMUNICATION
+        assertTrue(host.dispatchKeyEvent(key(KeyEvent.KEYCODE_VOICE_ASSIST, false)))
+        verify(controller, never()).requestSiri()
+    }
+
+    @Test fun legacySiriPressCannotTransferToAReplacementSession() {
+        assertTrue(host.dispatchKeyEvent(key(KeyEvent.KEYCODE_VOICE_ASSIST, true)))
+        field("activeAirPlaySession", mock(AirPlaySession::class.java))
+        assertTrue(host.dispatchKeyEvent(key(KeyEvent.KEYCODE_VOICE_ASSIST, false)))
+        verify(controller, never()).requestSiri()
     }
 
     private fun field(name: String, value: Any?) = host.javaClass.getDeclaredField(name)

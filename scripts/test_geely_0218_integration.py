@@ -1,6 +1,5 @@
-"""Source contracts for the exact 0.2.18 integration and its withheld hardware paths."""
+"""Capability-gated 0.2.18 integration; BYD, ADB and Telecom remain withheld."""
 from pathlib import Path
-import hashlib
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -15,12 +14,58 @@ class Geely0218IntegrationTest(unittest.TestCase):
         for name in ('UsbChargingCurrent.kt', 'backup/SettingsBackupCodec.kt', 'InitialAlbumRecovery.kt'):
             self.assertTrue((COMMON / name).is_file(), name)
 
-    def test_geely_wheel_bridge_has_no_retained_context_or_vendor_binding(self):
+    def test_geely_wheel_bridge_requires_explicit_capability_before_binding(self):
         text = (COMMON / 'GeelyWheelKeys.kt').read_text()
-        self.assertIn('fun start(context: Context) = Unit', text)
-        self.assertIn('fun stop() = Unit', text)
-        for forbidden in ('bindService(', 'registerListener(', 'postDelayed(', 'private var appContext'):
+        start = text.split('fun start(context: Context, controller: CarPlayController) {', 1)[1]
+        start = start.split('fun stop()', 1)[0]
+        self.assertLess(start.index('if (!GeelyInputSettings.enabled(context))'),
+                        start.index('context.applicationContext'))
+        bind = text.split('private fun bind(session: Session) {', 1)[1]
+        bind = bind.split('internal fun serviceUsable', 1)[0]
+        self.assertLess(bind.index('if (!current(session)) return'), bind.index('bindService('))
+        self.assertLess(bind.index('if (!serviceUsable(session.context, intent))'), bind.index('bindService('))
+        for required in ('Intent().setComponent(ComponentName(INPUT_PACKAGE, INPUT_CLASS))',
+                         'context.packageManager.resolveService(intent, 0)',
+                         'GeelyCapability.inputServiceUsable(',
+                         'context.checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED',
+                         'service.interfaceDescriptor == INPUT_DESCRIPTOR'):
+            self.assertIn(required, text)
+        for forbidden in ('LocalAdb(', 'AdbKeys', 'Settings.Secure', 'settings put secure', 'Runtime.getRuntime('):
             self.assertNotIn(forbidden, text)
+
+    def test_geely_manual_input_is_default_off_and_does_not_bypass_service_safety(self):
+        settings = (COMMON / 'GeelyInputSettings.kt').read_text()
+        self.assertIn('getBoolean("manual_enabled", false)', settings)
+        self.assertIn('GeelyVendorPolicy.geelyInput &&', settings)
+        self.assertIn('GeelyCapability.inputAllowed(GeelyHeadUnit.detected, manualEnabled(context))', settings)
+        capability = (SHARED / 'network/GeelyCapability.kt').read_text()
+        for required in ('product.equals("geely_fx11", ignoreCase = true) &&',
+                         'model.equals("CS11_A4", ignoreCase = true) &&',
+                         'manufacturer.equals("DesaySV", ignoreCase = true) && sdkInt == 30',
+                         'knownHardware || manualEnabled',
+                         'resolved && enabled && applicationEnabled && exported && permissionGranted'):
+            self.assertIn(required, capability)
+        detection = (SHARED / 'network/GeelyHeadUnit.kt').read_text()
+        self.assertIn('GeelyCapability.knownHardware(Build.PRODUCT, Build.MODEL, Build.MANUFACTURER, Build.VERSION.SDK_INT)', detection)
+        self.assertIn('.getOrDefault(false)', detection)
+        for forbidden in ('contains("geely")', 'contains("lynk")', 'identifiers.any'):
+            self.assertNotIn(forbidden, detection)
+
+    def test_wheel_stop_invalidates_callbacks_and_releases_listener_and_binding(self):
+        text = (COMMON / 'GeelyWheelKeys.kt').read_text()
+        stop = text.split('fun stop() {', 1)[1].split('private fun current(', 1)[0]
+        self.assertLess(stop.index('active = null'), stop.index('handler.post'))
+        self.assertIn('generation += 1', stop)
+        self.assertIn('handler::removeCallbacks', stop)
+        for required in ('generation == connection.session.generation',
+                         'connection.session.connection === connection',
+                         'manager.unregisterListener(listener, connection.session.context.packageName)',
+                         'connection.session.context.unbindService(connection)',
+                         'if (!current(connection) || !connection.subscribed || keyCode !in connection.codes) return',
+                         'if (session.retryCount >= MAX_RETRIES)',
+                         'retry = result.exceptionOrNull() !is SecurityException',
+                         'if (AirPlayPersistence.loadCarBluetoothAudio(connection.session.context)) return'):
+            self.assertIn(required, text)
 
     def test_vpn_fallback_cannot_evaluate_a_default_credential_argument(self):
         text = (COMMON / 'VpnPreConsent.kt').read_text()
@@ -64,18 +109,41 @@ class Geely0218IntegrationTest(unittest.TestCase):
         body = ui.split('private fun startInstaller(file: File, publicUri: Uri?) {', 1)[1].lstrip()
         self.assertTrue(body.startswith('if (!GeelyVendorPolicy.upstreamApkUpdates) return'))
 
-    def test_unverified_window_bridge_does_not_compete_with_media_session(self):
+    def test_foreground_media_keys_require_an_active_session_and_yield_calls_and_bluetooth(self):
         host = (COMMON / 'CarPlayHostActivity.kt').read_text()
-        self.assertIn('if (GeelyVendorPolicy.foregroundMediaKeys && downOrUp && mediaPress != null)', host)
-        policy = (SHARED / 'hud/GeelyVendorPolicy.kt').read_text()
-        self.assertIn('val foregroundMediaKeys: Boolean = false', policy)
+        for required in ('foregroundMediaKeys.consumeContinuation(event)',
+                         'foregroundMediaKeys.dispatch(event,',
+                         'sessionActive = activeAirPlaySession != null',
+                         'inCall = inCall(this)',
+                         'bluetoothAudio = AirPlayPersistence.loadCarBluetoothAudio(this)',
+                         'CarPlayMediaKeys.onForegroundMediaKey(mediaPress, controller)'):
+            self.assertIn(required, host)
+        media = (COMMON / 'CarPlayMediaKeys.kt').read_text()
+        for required in ('CarPlayMediaButton.forCarPlayWindow(event.keyCode, sessionActive, inCall)',
+                         'active.activeAirPlaySessionToken() ?: return false',
+                         'if (inCall(context) || AirPlayPersistence.loadCarBluetoothAudio(context)) return false',
+                         'if (active !== expectedController || !stillCurrent()) return false',
+                         'mediaDispatch.shouldSend(token, index, route,',
+                         'if (consumeContinuation(event)) return true',
+                         'event.repeatCount != 0 || bluetoothAudio'):
+            self.assertIn(required, media)
 
-    def test_language_implementation_matches_reviewed_system_default_blob(self):
-        # Restore upstream SYSTEM defaults while retaining saved-choice migration and script detection.
-        data = (COMMON / 'AppLocale.kt').read_bytes()
-        expected = 'c78b5212a25477bbaed72b984d926d8c621c7e88'
-        actual = hashlib.sha1(b'blob ' + str(len(data)).encode() + b'\0' + data).hexdigest()
-        self.assertEqual(expected, actual)
+    def test_language_defaults_migration_and_script_precedence_are_preserved(self):
+        # Assert the reviewed behavior rather than pinning unrelated whitespace/comments to a blob.
+        text = (COMMON / 'AppLocale.kt').read_text()
+        for required in ('if (locales.isEmpty) return SYSTEM',
+                         '.getString(KEY_LANGUAGE, SYSTEM)?.takeIf { it in ALL } ?: SYSTEM',
+                         'if (prefs.getBoolean(KEY_MIGRATED, false)) return',
+                         'if (manager.applicationLocales.isEmpty && previous != null)',
+                         'locale(language)?.let { LocaleList(it) } ?: LocaleList.getEmptyLocaleList()',
+                         'val locale = locale(preference(context)) ?: return context',
+                         'return when (selected.script)',
+                         '"Hant" -> TRADITIONAL_CHINESE',
+                         '"Hans" -> SIMPLIFIED_CHINESE',
+                         'else -> if (selected.country in setOf("TW", "HK", "MO"))'):
+            self.assertIn(required, text)
+        self.assertNotIn('getString(KEY_LANGUAGE, SIMPLIFIED_CHINESE)', text)
+        self.assertLess(text.index('return when (selected.script)'), text.index('selected.country'))
 
 if __name__ == '__main__':
     unittest.main()

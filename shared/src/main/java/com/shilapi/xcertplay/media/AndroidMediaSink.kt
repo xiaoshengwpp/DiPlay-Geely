@@ -528,6 +528,7 @@ class AndroidMediaSink(
             val uplink = microphoneUplinks.computeIfAbsent(id) {
                 MicrophoneUplink(config, onAudioDiagnostic,
                     speakerphoneCall = speakerphoneCall,
+                    siriMicrophoneSource = appContext?.let(SiriMicrophoneSettings::load) ?: SiriMicrophoneSource.AUTO,
                     echoReference = if (config.audioType == TELEPHONY_AUDIO_TYPE) callEchoReferences[id] else null)
             }
             if (!uplink.start()) {

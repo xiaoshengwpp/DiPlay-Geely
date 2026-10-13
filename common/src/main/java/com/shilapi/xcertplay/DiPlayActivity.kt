@@ -113,6 +113,7 @@ internal enum class SettingsSection {
     DISPLAY_AND_PERFORMANCE,
     EXPERIMENTAL_DISPLAY,
     ADVANCED_MEDIA,
+    GEELY_CAPABILITIES,
     AMBIENT_LIGHTING,
     CAR_BUTTON,
     AUDIO_ROUTING,
@@ -149,6 +150,7 @@ internal object SettingsInformationArchitecture {
             SettingsSection.CLUSTER_MAP,
             SettingsSection.EXPERIMENTAL_DISPLAY,
             SettingsSection.ADVANCED_MEDIA,
+            SettingsSection.GEELY_CAPABILITIES,
             SettingsSection.NAVIGATION_WHEEL,
             SettingsSection.AMBIENT_LIGHTING,
         ),
@@ -1571,6 +1573,36 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     }
 
     private fun allSettingsSections(content: LinearLayout) {
+        filteredSection(content, SettingsSection.GEELY_CAPABILITIES,
+            getString(R.string.settings_geely_capabilities), R.drawable.ic_dp_controls) { card ->
+            toggle(card, getString(R.string.settings_geely_input), getString(R.string.settings_geely_input_description),
+                GeelyInputSettings.manualEnabled(this)) {
+                GeelyInputSettings.setManualEnabled(this, it)
+                markReconnectNeeded()
+            }
+            val sources = com.shilapi.xcertplay.media.SiriMicrophoneSource.entries
+            choice(card, getString(R.string.settings_geely_siri_source), listOf(
+                getString(R.string.settings_geely_auto), getString(R.string.settings_geely_standard),
+                getString(R.string.settings_geely_compatible)),
+                sources.indexOf(com.shilapi.xcertplay.media.SiriMicrophoneSettings.load(this)), reconnects = false) {
+                com.shilapi.xcertplay.media.SiriMicrophoneSettings.save(this, sources[it])
+            }
+            card.addView(label(getString(R.string.settings_geely_siri_description), 14, MUTED))
+            val displays = GeelyDisplayCapabilities.read(this).displays.filter { it.eligibleForManualHud }
+            val selected = GeelyHudSelection.selectedDisplayId()
+            val options = listOf(getString(R.string.settings_geely_hud_off)) + displays.map {
+                "${it.displayId}: ${it.name} (${it.width} × ${it.height})"
+            }
+            choice(card, getString(R.string.settings_geely_hud_display), options,
+                (displays.indexOfFirst { it.displayId == selected } + 1).coerceAtLeast(0), reconnects = false) {
+                if (it == 0) GeelyHudSelection.clear()
+                else if (!GeelyHudSelection.select(this, displays[it - 1].displayId)) {
+                    toast(getString(R.string.settings_geely_hud_unavailable))
+                }
+            }
+            card.addView(label(getString(R.string.settings_geely_hud_description), 14, MUTED))
+        }
+
         filteredSection(content, SettingsSection.CARPLAY_CONTROLS,
             getString(R.string.carplay_controls), R.drawable.ic_dp_controls) { card ->
             val gestureFingers = listOf(0, 2, 3, 4)
@@ -5186,6 +5218,10 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                     appendLine("Session: ${if (CarPlayBackgroundSession.active) "active" else if (CarPlayBackgroundSession.hasSession()) "connecting" else "stopped"}")
                     appendLine(PhoneWakeDiagnostics.report(appContext))
                     appendLine("Head-unit board: ${Build.BOARD}; hardware: ${Build.HARDWARE}; build: ${Build.DISPLAY}")
+                    appendLine()
+                    appendLine("--- Geely capability diagnostics (read-only; no hardware support claim) ---")
+                    appendLine(GeelyCapabilityDiagnostics.report(appContext))
+                    appendLine(GeelyDisplayCapabilities.report(appContext))
                     appendLine()
                     appendLine("--- Current cluster display diagnostics (even when disabled) ---")
                     appendLine(ClusterMapPresentation.diagnosticReport(appContext))

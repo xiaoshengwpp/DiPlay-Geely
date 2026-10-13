@@ -134,6 +134,9 @@ import kotlin.math.roundToInt
  * Apple devices are discovered by vendor ID; CH341 uses the configured VID/PID below.
  */
 class CarPlayHostActivity : ComponentActivity() {
+    private val geelyHudProjection by lazy { GeelyHudProjection(this) }
+    private val geelyWindowDiagnostics by lazy { GeelyWindowDiagnostics(this) }
+
     private data class SettingsBaseline(
         val safeAreaRects: MutableMap<DisplaySize, SafeAreaRect?>,
         val customIconBytes: ByteArray?,
@@ -144,7 +147,8 @@ class CarPlayHostActivity : ComponentActivity() {
     private var reconnectAttempts = 0
     private val siriKey = WheelSiriKey()
     private val siriKeyPresses = WheelKeyPresses()
-    private val legacySiriPresses = mutableSetOf<Triple<Int, Int, Int>>()
+    private val legacySiriPresses = mutableMapOf<Triple<Int, Int, Int>, Pair<CarPlayController, AirPlaySession>>()
+    private val foregroundMediaKeys = CarPlayForegroundMediaKeys()
     private val startupRetryBudget = WirelessStartupRetryBudget()
     private var startupRetryStopped = false
     private var startupRetryButton: View? = null
@@ -928,6 +932,8 @@ class CarPlayHostActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
+        geelyWindowDiagnostics.start()
+        geelyHudProjection.start()
         isActivityStarted = true
         logThemeState(ThemeModeDiagnostics.Source.START, resources.configuration)
         mainHandler.removeCallbacks(pollConfiguration)
@@ -1347,12 +1353,14 @@ class CarPlayHostActivity : ComponentActivity() {
 
     // Hardware navigation belongs to the iPhone-rendered CarPlay UI, not Android View focus.
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (foregroundMediaKeys.consumeContinuation(event)) return true
         val physicalKey = Triple(event.deviceId, event.keyCode, event.scanCode)
         val downOrUp = event.action == KeyEvent.ACTION_DOWN || event.action == KeyEvent.ACTION_UP
         if (downOrUp && physicalKey in legacySiriPresses) {
             if (event.action == KeyEvent.ACTION_UP) {
-                legacySiriPresses.remove(physicalKey)
-                requestLegacySiri(event.keyCode)
+                legacySiriPresses.remove(physicalKey)?.let { (owner, session) ->
+                    requestLegacySiri(event.keyCode, owner, session)
+                }
             }
             return true
         }
@@ -1397,36 +1405,32 @@ class CarPlayHostActivity : ComponentActivity() {
         if (assignedAction != WheelZoomKeys.Action.PASS) return true
         if (downOrUp && assignedKey) return super.dispatchKeyEvent(event)
 
-        // Steering-wheel next/previous, claimed by the CarPlay screen itself. BYD gives these keys to
-        // whichever window is in front, and this is the only route that reaches CarPlay without the
-        // wheel key service — which a head unit with no ADB cannot turn on at all.
-        val mediaPress = CarPlayMediaButton.forCarPlayWindow(
-            event.keyCode,
-            sessionActive = activeAirPlaySession != null,
-            inCall = inCall(this),
-        )
-        if (GeelyVendorPolicy.foregroundMediaKeys && downOrUp && mediaPress != null) {
-            // A media button is a tap, and BYD sends each tap as an instant down/up pair: send once,
-            // on the press. The release is swallowed rather than passed on, or BYD's own player would
-            // receive an unpaired key.
-            if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
-                val sent = controller?.sendMediaButton(mediaPress) == true
+        // Standard next/previous work without a private vendor service or accessibility setup.
+        // AVRCP retains priority when the driver routes CarPlay audio through the car's Bluetooth.
+        if (foregroundMediaKeys.dispatch(event,
+                sessionActive = activeAirPlaySession != null,
+                inCall = inCall(this),
+                bluetoothAudio = AirPlayPersistence.loadCarBluetoothAudio(this),
+            ) { mediaPress ->
+                val sent = CarPlayMediaKeys.onForegroundMediaKey(mediaPress, controller)
                 appendLog("Media: wheel key ${event.keyCode} -> CarPlay $mediaPress sent=$sent")
-            }
+            }) return true
+
+        // Legacy voice keys keep release-to-Siri, but only a press begun in this session owns it.
+        if (!downOrUp || !CarPlayMediaButton.opensSiri(event.keyCode)) return super.dispatchKeyEvent(event)
+        val siriController = controller ?: return super.dispatchKeyEvent(event)
+        val siriSession = activeAirPlaySession ?: return super.dispatchKeyEvent(event)
+        if (inCall(this)) return super.dispatchKeyEvent(event)
+        if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+            legacySiriPresses[physicalKey] = siriController to siriSession
             return true
         }
-
-        // Keep DiPlay's existing steering-wheel/voice-key Siri handling intact.
-        if (!CarPlayMediaButton.opensSiri(event.keyCode)) return super.dispatchKeyEvent(event)
-        if (event.action == KeyEvent.ACTION_DOWN) legacySiriPresses.add(physicalKey)
-        if (event.action == KeyEvent.ACTION_UP) {
-            requestLegacySiri(event.keyCode)
-        }
-        return true
+        return super.dispatchKeyEvent(event)
     }
 
-    private fun requestLegacySiri(keyCode: Int) {
-        val sent = controller?.requestSiri() == true
+    private fun requestLegacySiri(keyCode: Int, expectedController: CarPlayController, expectedSession: AirPlaySession) {
+        if (controller !== expectedController || activeAirPlaySession !== expectedSession || inCall(this)) return
+        val sent = expectedController.requestSiri()
         appendLog("Siri: voice key $keyCode sent=$sent")
     }
 
@@ -1452,6 +1456,8 @@ class CarPlayHostActivity : ComponentActivity() {
     }
 
     override fun onStop() {
+        geelyHudProjection.stop()
+        geelyWindowDiagnostics.stop()
         fpsCounter?.stop()
         closePicturePanel()
         // The controller, USB/iAP2 link, and VPN attachment intentionally outlive the UI.
@@ -1543,6 +1549,8 @@ class CarPlayHostActivity : ComponentActivity() {
     }
 
     override fun onDestroy() {
+        geelyHudProjection.stop()
+        geelyWindowDiagnostics.stop()
         resetSidePanel()
         releaseSidePanelEffects()
         hostAppearanceResumed = false

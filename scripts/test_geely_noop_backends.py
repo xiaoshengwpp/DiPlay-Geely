@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Removed vendor backends must stay absent, not merely hidden behind a policy flag."""
+"""Unsupported BYD, ADB and Telecom backends stay absent beside gated Geely capabilities."""
 from pathlib import Path
 import re
 import unittest
@@ -78,6 +78,27 @@ class GeelyNoopBackendsTest(unittest.TestCase):
             self.assertIn(f'fun {name}(context: Context): Boolean = false', text)
         for name in ('setPhoneAudioRoute', 'setPhoneAudioRouteApps', 'setFceCluster'):
             self.assertIn(f'fun {name}(context: Context, enabled: Boolean) = Unit', text)
+
+    def test_adb_diagnostic_model_cannot_probe_or_authorize_a_transport(self):
+        text = (S/'adb/AdbCapability.kt').read_text()
+        for required in ('fun snapshot(developerSettingEnabled: Boolean?): Snapshot',
+                         'val localTransport: State = State.NOT_IMPLEMENTED',
+                         'val ownerComputerTransport: State = State.UNKNOWN',
+                         'A setting is not a connection or authorization'):
+            self.assertIn(required, text)
+        for forbidden in ('import android.', 'LocalAdb', 'AdbKeys', 'Runtime.getRuntime(',
+                          'ProcessBuilder(', 'Socket(', 'getSystemService(',
+                          'getSharedPreferences(', 'Settings.Global', 'Settings.Secure',
+                          'settings put', 'pm grant', 'appops set', 'adb connect', 'adb pair'):
+            self.assertNotIn(forbidden, text)
+
+    def test_no_oem_phone_backend_is_reported_as_active_or_constructed(self):
+        text = (S/'telecom/PhoneAudioRoute.kt').read_text().split('object PhoneAudioRoute {', 1)[1]
+        self.assertIn('fun capability(): Capability = Capability.NO_VERIFIED_GEELY_BACKEND', text)
+        self.assertIn('fun carPlayCallsUseCarAudio(): Boolean = false', text)
+        for forbidden in ('PhoneAudioRouteController(', 'TelecomPhoneAudioBackend(', 'VoipCallWatcher(',
+                          'Executors.', 'getSystemService(', 'registerPhoneAccount('):
+            self.assertNotIn(forbidden, text)
 
     def test_disabled_mutating_helper_entry_points_are_inert(self):
         expectations = {

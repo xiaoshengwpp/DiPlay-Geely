@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_geely_capabilities">吉利兼容性（实验性）</string>
+    <string name="settings_geely_input">未知车机输入桥接（实验性）</string>
+    <string name="settings_geely_input_description">允许在尚未验证的车机上使用吉利输入服务。需要可访问的服务，下次连接 CarPlay 时生效。已知硬件自动检测。</string>
+    <string name="settings_geely_siri_source">Siri 麦克风来源（实验性）</string>
+    <string name="settings_geely_auto">自动</string>
+    <string name="settings_geely_standard">标准 · 语音识别</string>
+    <string name="settings_geely_compatible">兼容 · 语音通信</string>
+    <string name="settings_geely_siri_description">下次使用 Siri 时生效。自动模式仅对上游已知硬件选择兼容来源。电话通话的麦克风行为保持不变。</string>
+    <string name="settings_geely_hud_display">导航显示屏（实验性）</string>
+    <string name="settings_geely_hud_off">关闭</string>
+    <string name="settings_geely_hud_unavailable">此显示屏已不可用。</string>
+    <string name="settings_geely_hud_description">手动选择 Android 对应用开放的副屏，仅显示导航提示，不含完整地图或原厂 HUD 协议。选择临时有效，断开连接或移除显示屏后清除。没有候选屏幕时，表示应用无法访问所需的原厂接口。</string>
+</resources>
