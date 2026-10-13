@@ -48,37 +48,71 @@ class ClusterActivityOutputTest {
         assertFalse(ClusterActivityOutput.hasConfirmedRoute())
     }
 
-    @Test fun theRouteSettlesWhenTheWindowConfirmsOrTheShellRejectsTheLaunch() {
+    @Test fun forgedPendingTicketCannotAdmitARouteAndRejectedOrStoppedLaunchSettles() {
         val app = org.robolectric.RuntimeEnvironment.getApplication()
-        AirPlayPersistence.saveAdbClusterEnabled(app, true)
+        app.getSharedPreferences("xcertplay_airplay", 0).edit()
+            .putBoolean("cluster_map_enabled", true)
+            .putBoolean("adb_cluster_activity_enabled", true).commit()
         val owner = Any()
-        ClusterActivityOutput.bind(owner, 4) { }
+        val events = mutableListOf<Surface?>()
+        ClusterActivityOutput.bind(owner, 4) { events += it }
         val token = "01234567-89ab-cdef-0123-456789abcdef"
-        fun admit(display: Int) {
+        fun forgePendingTicket() {
             ClusterActivityOutput::class.java.getDeclaredField("launchToken")
                 .apply { isAccessible = true }.set(ClusterActivityOutput, token)
             ClusterActivityOutput::class.java.getDeclaredField("expectedDisplay")
-                .apply { isAccessible = true }.setInt(ClusterActivityOutput, display)
+                .apply { isAccessible = true }.setInt(ClusterActivityOutput, 1)
+            ClusterActivityOutput.launchPending = true
         }
         val activity = org.robolectric.Robolectric.buildActivity(AdbClusterActivity::class.java).get()
+        val texture = SurfaceTexture(0)
+        val output = Surface(texture)
+        fun assertNoAdmission() {
+            assertFalse(ClusterActivityOutput.acceptsToken(token))
+            assertFalse(ClusterActivityOutput.hasConfirmedRoute())
+            assertNull(ClusterActivityOutput.activity.get())
+            assertNull(ClusterActivityOutput.surface)
+            assertFalse(ClusterActivityOutput.streamActive)
+            assertEquals(-1, ClusterActivityOutput.mainTaskId)
+            assertTrue(events.isEmpty())
+            assertTrue("Rejected output keeps ownership of its own surface", output.isValid)
+        }
         try {
             assertFalse(ClusterActivityOutput.routeSettling())
-            ClusterActivityOutput.launchPending = true
+            forgePendingTicket()
             assertTrue(ClusterActivityOutput.routeSettling())
-            admit(display = 1)
-            ClusterActivityOutput.completeLaunch(token, current = true, accepted = true) { }
-            // The shell accepted the launch; the window has not reported its display yet.
+            ClusterActivityOutput.completeLaunch(token, current = true, accepted = true) {
+                fail("An accepted modeled reply must not release a rejected lease yet")
+            }
+            // A forged accepted reply may leave the bookkeeping pending, but never bypasses Geely admission.
             assertTrue(ClusterActivityOutput.routeSettling())
-            assertTrue(ClusterActivityOutput.confirm(activity, token, 1))
+            assertFalse(ClusterActivityOutput.confirm(activity, token, 1))
+            ClusterActivityOutput.attach(activity, output)
+            ClusterActivityOutput.setStreamActive(true)
+            assertNoAdmission()
+
+            var released = false
+            ClusterActivityOutput.completeLaunch(token, current = true, accepted = false) {
+                assertFalse(ClusterActivityOutput.routeSettling())
+                assertNoAdmission()
+                released = true
+            }
+            assertTrue(released)
+            assertFalse(ClusterActivityOutput.launchPending)
             assertFalse(ClusterActivityOutput.routeSettling())
 
+            forgePendingTicket()
+            assertTrue(ClusterActivityOutput.routeSettling())
             ClusterActivityOutput.stopForSettings()
-            ClusterActivityOutput.bind(owner, 4) { }
-            admit(display = 1)
-            ClusterActivityOutput.launchPending = true
-            ClusterActivityOutput.completeLaunch(token, current = true, accepted = false) { }
+            assertFalse(ClusterActivityOutput.launchPending)
             assertFalse(ClusterActivityOutput.routeSettling())
-        } finally { ClusterActivityOutput.stop(owner) }
+            assertFalse(ClusterActivityOutput.confirm(activity, token, 1))
+            assertNoAdmission()
+        } finally {
+            ClusterActivityOutput.stopForSettings()
+            output.release()
+            texture.release()
+        }
     }
 
     @Test fun rejectedShellLaunchInvalidatesAdmissionBeforeRestoringOemState() {

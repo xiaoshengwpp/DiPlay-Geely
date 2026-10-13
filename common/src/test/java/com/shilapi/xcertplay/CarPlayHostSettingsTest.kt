@@ -755,7 +755,7 @@ class CarPlayHostSettingsTest {
         val close = views(panel).filterIsInstance<Button>()
             .first { it.text == activity.getString(R.string.close) }
         assertTrue(close.width >= close.height)
-        val destination = System.getenv("DIPLAY_SCREENSHOT_DIR") ?: return
+        val destination = System.getenv("DIPLAY_SCREENSHOT_DIR") ?: "build/reports/album-artwork-ui"
         val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
         root.draw(Canvas(bitmap))
         val file = File(destination, name)
