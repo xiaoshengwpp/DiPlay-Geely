@@ -11,6 +11,8 @@ import java.math.BigInteger
 import java.util.Collections
 import java.util.WeakHashMap
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ScheduledThreadPoolExecutor
+import java.util.concurrent.TimeUnit
 
 /** Identity of one CarPlay audio stream: the stream type plus its CarPlay audio type. */
 data class AudioStreamId(val type: Int, val audioType: String)
@@ -84,10 +86,20 @@ class CarPlayMediaEngine(
     private val streams = ConcurrentHashMap<StreamKey, Closeable>()
     private val audioMeta = ConcurrentHashMap<StreamKey, AudioMeta>()
     private val pendingMicrophone = ConcurrentHashMap<StreamKey, MicrophoneConfig>()
+    // Sink IDs have no session component. A late close from an old session must not stop its replacement.
+    private val microphoneOwnershipLock = Any()
+    private val microphoneOwners = mutableMapOf<AudioStreamId, MicrophoneConfig>()
     private val audioCaptures = ConcurrentHashMap<StreamKey, AudioPacketCapture>()
     private val pendingIapTunnels = ConcurrentHashMap<AirPlaySession, PendingIapTunnel>()
     private val videoSettingsChannels = ConcurrentHashMap<AirPlaySession, VideoSettingsChannel>()
     private val bufferedStreams = ConcurrentHashMap<AirPlaySession, BufferedStream>()
+    private val microphoneScheduler by lazy {
+        ScheduledThreadPoolExecutor(1) { task -> Thread(task, "carplay-mic-start").apply { isDaemon = true } }.apply {
+            removeOnCancelPolicy = true
+            setKeepAliveTime(MICROPHONE_SCHEDULER_IDLE_SECONDS, TimeUnit.SECONDS)
+            allowCoreThreadTimeOut(true)
+        }
+    }
 
     private class BufferedStream(val stream: BufferedAudioStream, val connectionId: Any?)
 
@@ -157,6 +169,7 @@ class CarPlayMediaEngine(
     }
 
     override fun onAudio(session: AirPlaySession, type: Int, stream: Map<String, Any?>): Map<String, Any?>? {
+        if (session.isClosed) return null
         val audioType = stream["audioType"]?.toString()?.lowercase() ?: "default"
         // Concurrent streams may share a type (e.g. music, guidance and Siri can all arrive as
         // type 100); only the same (type, audioType) pair replaces a previous stream.
@@ -165,7 +178,7 @@ class CarPlayMediaEngine(
         streams.remove(streamKey)?.close()
         audioMeta.remove(streamKey)
         audioCaptures.remove(streamKey)?.close()
-        if (pendingMicrophone.remove(streamKey) != null) sink.onMicrophoneStopped(streamId)
+        stopMicrophone(streamKey)
         sink.onAudioStopped(streamId)
 
         val key = outputKey(session, stream) ?: return null
@@ -185,7 +198,7 @@ class CarPlayMediaEngine(
         val latencyMs = (stream["audioLatencyMs"] as? Number)?.toInt() ?: 0
         val meta = AudioMeta(type, format, connectionId, latencyMs)
         val microphone = microphoneConfig(session, type, stream, format)
-        if (microphone != null) pendingMicrophone[streamKey] = microphone
+        if (microphone != null) registerMicrophone(streamKey, microphone)
         if (type == STREAM_TYPE_MAIN_AUDIO && audioType != "media") {
             session.logDebug(
                 "Audio: setup type=$type audioType=$audioType input=${stream["input"] ?: "none"} " +
@@ -197,6 +210,7 @@ class CarPlayMediaEngine(
         val capture = audioCaptureDirectory?.let { AudioPacketCapture(it, type) }
         if (capture != null) audioCaptures[streamKey] = capture
         val clockProbe = RtpClockProbe()
+        val microphoneStart = microphone?.let { config -> MicrophoneStart { sink.onMicrophoneStarted(streamId, config) } }
         val audio = AudioStream(key, type, session::logDebug)
         val (dataPort, controlPort) = audio.listen(
             object : AudioStream.Listener {
@@ -204,7 +218,11 @@ class CarPlayMediaEngine(
                     meta.firstSample = firstSample
                     meta.originNs = System.nanoTime()
                     sink.onAudioStarted(streamId, format, firstSample)
-                    microphone?.let { sink.onMicrophoneStarted(streamId, it) }
+                    // First-packet capture has the same ownership barrier as the silent-start timer.
+                    startMicrophoneIfCurrent(streamKey, microphone) {
+                        microphoneStart?.onDownlink()
+                        true
+                    }
                 }
 
                 override fun onRtp(rtp: ByteArray, sample: Int) {
@@ -231,6 +249,18 @@ class CarPlayMediaEngine(
         )
         streams[streamKey] = audio
         audioMeta[streamKey] = meta
+        if (microphoneStart != null && MicrophoneStart.startsWithoutDownlink(audioType)) {
+            microphoneStart.scheduleSilentStart(microphoneScheduler, MicrophoneStart.SILENT_START_MILLIS) { startNow ->
+                // Atomic with TEARDOWN and replacements, including a newer control session.
+                val started = startMicrophoneIfCurrent(streamKey, microphone, startNow)
+                if (started) {
+                    session.logDebug(
+                        "Audio: microphone started without downlink audio type=$type audioType=$audioType " +
+                            "afterMs=${MicrophoneStart.SILENT_START_MILLIS}",
+                    )
+                }
+            }
+        }
         return linkedMapOf(
             "type" to type,
             "dataPort" to dataPort,
@@ -492,7 +522,7 @@ class CarPlayMediaEngine(
         val tornDown = streams.keys.filter { it.session === session && it.type == type }
         tornDown.forEach { key ->
             val streamId = AudioStreamId(key.type, key.audioType)
-            if (pendingMicrophone.remove(key) != null) sink.onMicrophoneStopped(streamId)
+            stopMicrophone(key)
             audioMeta.remove(key)
             audioCaptures.remove(key)?.close()
             // BufferedAudioStream owns serialized sink cleanup; stopping it first from here
@@ -513,11 +543,38 @@ class CarPlayMediaEngine(
         sessionStreams
             .filter { isScreenStreamType(it.type) }
             .forEach { sink.onScreenStreamActive(it.type, false) }
+        pendingMicrophone.keys.filter { it.session === session }.forEach(::stopMicrophone)
         sessionStreams.forEach { streams.remove(it)?.close() }
-        audioMeta.clear()
-        pendingMicrophone.clear()
-        audioCaptures.values.forEach(AudioPacketCapture::close)
-        audioCaptures.clear()
+        audioMeta.keys.filter { it.session === session }.forEach { audioMeta.remove(it) }
+        audioCaptures.keys.filter { it.session === session }.forEach { audioCaptures.remove(it)?.close() }
+    }
+
+    private fun registerMicrophone(key: StreamKey, config: MicrophoneConfig) {
+        synchronized(microphoneOwnershipLock) {
+            if (key.session.isClosed) return
+            val id = AudioStreamId(key.type, key.audioType)
+            microphoneOwners.remove(id)?.let { sink.onMicrophoneStopped(id) }
+            pendingMicrophone[key] = config
+            microphoneOwners[id] = config
+        }
+    }
+
+    private fun startMicrophoneIfCurrent(key: StreamKey, config: MicrophoneConfig?, start: () -> Boolean): Boolean =
+        synchronized(microphoneOwnershipLock) {
+            if (config == null || key.session.isClosed || pendingMicrophone[key] !== config ||
+                microphoneOwners[AudioStreamId(key.type, key.audioType)] !== config) return@synchronized false
+            start()
+        }
+
+    private fun stopMicrophone(key: StreamKey) {
+        synchronized(microphoneOwnershipLock) {
+            val config = pendingMicrophone.remove(key) ?: return
+            val id = AudioStreamId(key.type, key.audioType)
+            if (microphoneOwners[id] === config) {
+                microphoneOwners.remove(id)
+                sink.onMicrophoneStopped(id)
+            }
+        }
     }
 
     /** Removes ownership before a close that may block on delivery or invoke the sink. */
@@ -650,6 +707,7 @@ class CarPlayMediaEngine(
         }
 
         private const val TAG = "xcertplay-usb"
+        private const val MICROPHONE_SCHEDULER_IDLE_SECONDS = 5L
         private const val STREAM_TYPE_MAIN_SCREEN = 110
         private const val STREAM_TYPE_ALT_SCREEN = 111
         private const val STREAM_TYPE_MAIN_AUDIO = 100

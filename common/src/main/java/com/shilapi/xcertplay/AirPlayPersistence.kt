@@ -76,6 +76,7 @@ object AirPlayPersistence {
     private const val KEY_CAR_BLUETOOTH_AUDIO = "car_bluetooth_audio"
     private const val KEY_CALL_ECHO_CANCELLATION = "call_echo_cancellation"
     private const val KEY_CALL_VOICE_FILTER = "call_voice_filter"
+    private const val KEY_CALL_SPEAKERPHONE = "call_speakerphone"
     private const val KEY_SMOOTH_VIDEO = "smooth_video"
     private const val KEY_MTK_DECODER_TUNING = "mtk_decoder_tuning"
     private const val KEY_DIRECT_VIDEO_OUTPUT = "direct_video_output"
@@ -285,6 +286,18 @@ object AirPlayPersistence {
         if (channel == null) editor.remove(KEY_NAVIGATION_AUDIO_CHANNEL)
         else editor.putInt(KEY_NAVIGATION_AUDIO_CHANNEL, channel)
         editor.apply()
+    }
+
+    /** Applies a nonzero setup-guide default only when no current or legacy choice exists. */
+    fun applySetupNavigationAudioChannelDefault(context: Context, channel: Int): Boolean {
+        if (!com.shilapi.xcertplay.hud.GeelyVendorPolicy.bydAdb) return false
+        if (channel !in AUDIO_CHANNELS || channel == 0) return false
+        val prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+        if (prefs.contains(KEY_NAVIGATION_AUDIO_CHANNEL) || prefs.contains(KEY_NAVIGATION_STREAM_TYPE)) return false
+        prefs.edit()
+            .putInt(KEY_NAVIGATION_AUDIO_CHANNEL, channel)
+            .apply()
+        return true
     }
 
     fun loadWirelessEnabled(context: Context): Boolean =
@@ -700,6 +713,13 @@ object AirPlayPersistence {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_CALL_VOICE_FILTER, enabled).apply()
     }
 
+    fun loadCallSpeakerphone(context: Context): Boolean =
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean(KEY_CALL_SPEAKERPHONE, false)
+
+    fun saveCallSpeakerphone(context: Context, enabled: Boolean) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_CALL_SPEAKERPHONE, enabled).apply()
+    }
+
     fun saveFps(context: Context, fps: Int) {
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
             .putInt(KEY_FPS, AirPlayDisplaySettings.sanitizeFps(fps))
@@ -768,6 +788,10 @@ object AirPlayPersistence {
         if (enabled) edit.putBoolean(KEY_CLUSTER_MAP, true)
         edit.apply()
     }
+
+    /** Either DiLink 4 cluster route, ADB video or the Platform 21 task; on DiLink 3 both stop the dashboard map (#722). */
+    fun loadDiLink4ClusterRouteEnabled(context: Context): Boolean =
+        loadAdbClusterEnabled(context) || loadLegacyClusterEnabled(context)
 
     fun loadLegacyClusterEnabled(context: Context): Boolean = loadClusterMapEnabled(context) &&
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getBoolean("platform21_cluster_enabled", false)

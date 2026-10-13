@@ -73,6 +73,7 @@ class AdbClusterActivity : Activity() {
         videoRegion.addView(waiting, FrameLayout.LayoutParams(-1, -1))
         turnCard = ClusterTurnCardView(this).apply { visibility = View.GONE }
         root.addView(turnCard, FrameLayout.LayoutParams(-1, -1))
+        root.addView(ClusterMusicView(this), FrameLayout.LayoutParams(-1, -1))
         root.addView(ClusterSpeedometerView(this), FrameLayout.LayoutParams(-1, -1))
         safeAreaPreview = SafeAreaEditorView(this).apply {
             visibility = View.GONE
@@ -172,6 +173,8 @@ internal object ClusterActivityOutput {
     fun acceptsToken(token: String?): Boolean = GeelyVendorPolicy.bydCluster && token != null && token == launchToken && (hostOwner != null || previewHost.get() != null)
     fun hasConfirmedRoute(): Boolean = GeelyVendorPolicy.bydCluster && activity.get()?.let { !it.isFinishing && !it.isDestroyed } == true &&
         expectedDisplay > 0
+    /** A launch is running, or the shell accepted it and the window has not confirmed its display yet. */
+    fun routeSettling(): Boolean = !hasConfirmedRoute() && (launchPending || (launchToken != null && expectedDisplay > 0))
     fun confirm(window: AdbClusterActivity, token: String?, display: Int): Boolean {
         if (!GeelyVendorPolicy.bydCluster) return false
         if (!acceptsToken(token) || display <= 0 || display != expectedDisplay ||
