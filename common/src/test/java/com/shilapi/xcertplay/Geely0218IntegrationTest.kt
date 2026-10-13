@@ -3,6 +3,10 @@ package com.shilapi.xcertplay
 import android.content.Context
 import android.content.ContextWrapper
 import android.content.SharedPreferences
+import android.content.Intent
+import android.content.ServiceConnection
+import com.shilapi.xcertplay.orchestration.CarPlayController
+import org.mockito.Mockito.mock
 import android.os.Looper
 import com.shilapi.xcertplay.adb.LocalAdb
 import com.shilapi.xcertplay.update.BackgroundUpdateScheduler
@@ -26,13 +30,18 @@ class Geely0218IntegrationTest {
         override fun getSystemService(name: String): Any = error("unexpected system service access")
     }
 
-    @Test fun wheelStartStopAndIdleNeverBindOrRetainAContext() {
+    @Test fun unknownWheelHardwareStaysInactiveWithoutManualConsent() {
+        val context = object : ContextWrapper(RuntimeEnvironment.getApplication()) {
+            override fun bindService(intent: Intent, connection: ServiceConnection, flags: Int): Boolean =
+                error("unknown hardware must not bind without consent")
+            override fun getApplicationContext(): Context = this
+        }
+        GeelyInputSettings.setManualEnabled(context, false)
         repeat(3) {
-            GeelyWheelKeys.start(rejecting)
+            GeelyWheelKeys.start(context, mock(CarPlayController::class.java))
             GeelyWheelKeys.stop()
             shadowOf(Looper.getMainLooper()).idle()
         }
-        assertFalse(GeelyWheelKeys::class.java.declaredFields.any { it.type == Context::class.java })
     }
 
     @Test fun vpnFallbackCannotLoadKeysOrUseEvenAnInjectedAdbTransport() {
@@ -72,7 +81,7 @@ class Geely0218IntegrationTest {
             AirPlayPersistence.saveNavigationStreamType(context, stream)
             for (channel in listOf(null, 0, 14)) {
                 AirPlayPersistence.saveNavigationAudioChannel(context, channel)
-                GeelyWheelKeys.start(context)
+                GeelyWheelKeys.start(context, mock(CarPlayController::class.java))
                 GeelyWheelKeys.stop()
                 assertEquals(channel, AirPlayPersistence.loadNavigationAudioChannel(context))
                 assertEquals(stream, AirPlayPersistence.loadNavigationStreamType(context))

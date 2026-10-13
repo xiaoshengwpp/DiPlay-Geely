@@ -22,11 +22,14 @@ object CarPlayGlance {
         val remainingMeters: Long? = null,
         val song: String? = null,
         val playing: Boolean = false,
+        /** Changes on every disconnect, including transitions between consumer polls. */
+        val disconnectEpoch: Long = 0L,
     )
 
     private val route = BydHudRouteState()
     private val song = ClusterSongState()
     private var connected = false
+    private var disconnectEpoch = 0L
     private var last = Snapshot()
 
     /** Called with each new snapshot, on the thread that changed it. */
@@ -57,6 +60,7 @@ object CarPlayGlance {
             if (connected == next) return
             connected = next
             if (!next) {
+                disconnectEpoch += 1
                 route.clear()
                 song.clear()
             }
@@ -70,6 +74,7 @@ object CarPlayGlance {
         val current = song.current()
         val next = Snapshot(
             connected = connected,
+            disconnectEpoch = disconnectEpoch,
             maneuverType = maneuver?.type,
             drivingSide = maneuver?.drivingSide ?: 0,
             distanceMeters = maneuver?.distanceMeters ?: 0,

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_geely_capabilities">吉利相容性（實驗性）</string>
+    <string name="settings_geely_input">未知車機輸入橋接（實驗性）</string>
+    <string name="settings_geely_input_description">允許在尚未驗證的車機上使用吉利輸入服務。需要可存取的服務，下次連線 CarPlay 時生效。已知硬體自動偵測。</string>
+    <string name="settings_geely_siri_source">Siri 麥克風來源（實驗性）</string>
+    <string name="settings_geely_auto">自動</string>
+    <string name="settings_geely_standard">標準 · 語音辨識</string>
+    <string name="settings_geely_compatible">相容 · 語音通訊</string>
+    <string name="settings_geely_siri_description">下次使用 Siri 時生效。自動模式僅對上游已知硬體選擇相容來源。電話通話的麥克風行為保持不變。</string>
+    <string name="settings_geely_hud_display">導航顯示器（實驗性）</string>
+    <string name="settings_geely_hud_off">關閉</string>
+    <string name="settings_geely_hud_unavailable">此顯示器已無法使用。</string>
+    <string name="settings_geely_hud_description">手動選擇 Android 對應用程式開放的副螢幕，僅顯示導航提示，不含完整地圖或原廠 HUD 協定。選擇暫時有效，中斷連線或移除顯示器後清除。沒有候選螢幕時，表示應用程式無法存取所需的原廠介面。</string>
+</resources>

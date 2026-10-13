@@ -113,6 +113,7 @@ internal enum class SettingsSection {
     DISPLAY_AND_PERFORMANCE,
     EXPERIMENTAL_DISPLAY,
     ADVANCED_MEDIA,
+    GEELY_CAPABILITIES,
     AMBIENT_LIGHTING,
     CAR_BUTTON,
     AUDIO_ROUTING,
@@ -149,6 +150,7 @@ internal object SettingsInformationArchitecture {
             SettingsSection.CLUSTER_MAP,
             SettingsSection.EXPERIMENTAL_DISPLAY,
             SettingsSection.ADVANCED_MEDIA,
+            SettingsSection.GEELY_CAPABILITIES,
             SettingsSection.NAVIGATION_WHEEL,
             SettingsSection.AMBIENT_LIGHTING,
         ),
@@ -1571,6 +1573,36 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     }
 
     private fun allSettingsSections(content: LinearLayout) {
+        filteredSection(content, SettingsSection.GEELY_CAPABILITIES,
+            getString(R.string.settings_geely_capabilities), R.drawable.ic_dp_controls) { card ->
+            toggle(card, getString(R.string.settings_geely_input), getString(R.string.settings_geely_input_description),
+                GeelyInputSettings.manualEnabled(this)) {
+                GeelyInputSettings.setManualEnabled(this, it)
+                markReconnectNeeded()
+            }
+            val sources = com.shilapi.xcertplay.media.SiriMicrophoneSource.entries
+            choice(card, getString(R.string.settings_geely_siri_source), listOf(
+                getString(R.string.settings_geely_auto), getString(R.string.settings_geely_standard),
+                getString(R.string.settings_geely_compatible)),
+                sources.indexOf(com.shilapi.xcertplay.media.SiriMicrophoneSettings.load(this)), reconnects = false, growForText = true) {
+                com.shilapi.xcertplay.media.SiriMicrophoneSettings.save(this, sources[it])
+            }
+            card.addView(label(getString(R.string.settings_geely_siri_description), 14, MUTED))
+            val displays = GeelyDisplayCapabilities.read(this).displays.filter { it.eligibleForManualHud }
+            val selected = GeelyHudSelection.selectedDisplayId()
+            val options = listOf(getString(R.string.settings_geely_hud_off)) + displays.map {
+                "${it.displayId}: ${it.name} (${it.width} × ${it.height})"
+            }
+            choice(card, getString(R.string.settings_geely_hud_display), options,
+                (displays.indexOfFirst { it.displayId == selected } + 1).coerceAtLeast(0), reconnects = false, growForText = true) {
+                if (it == 0) GeelyHudSelection.clear()
+                else if (!GeelyHudSelection.select(this, displays[it - 1].displayId)) {
+                    toast(getString(R.string.settings_geely_hud_unavailable))
+                }
+            }
+            card.addView(label(getString(R.string.settings_geely_hud_description), 14, MUTED))
+        }
+
         filteredSection(content, SettingsSection.CARPLAY_CONTROLS,
             getString(R.string.carplay_controls), R.drawable.ic_dp_controls) { card ->
             val gestureFingers = listOf(0, 2, 3, 4)
@@ -5187,6 +5219,10 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                     appendLine(PhoneWakeDiagnostics.report(appContext))
                     appendLine("Head-unit board: ${Build.BOARD}; hardware: ${Build.HARDWARE}; build: ${Build.DISPLAY}")
                     appendLine()
+                    appendLine("--- Geely capability diagnostics (read-only; no hardware support claim) ---")
+                    appendLine(GeelyCapabilityDiagnostics.report(appContext))
+                    appendLine(GeelyDisplayCapabilities.report(appContext))
+                    appendLine()
                     appendLine("--- Current cluster display diagnostics (even when disabled) ---")
                     appendLine(ClusterMapPresentation.diagnosticReport(appContext))
                     appendLine()
@@ -5591,7 +5627,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
     // [announcesReconnect] labels a choice whose [save] reconnects by itself.
     private fun choice(parent: LinearLayout, title: String, options: List<String>, current: Int, reconnects: Boolean = true,
-        announcesReconnect: Boolean = reconnects, enabled: Boolean = true, save: (Int) -> Unit) {
+        announcesReconnect: Boolean = reconnects, enabled: Boolean = true, growForText: Boolean = false, save: (Int) -> Unit) {
         var selection = current
         val button = button("$title · ${options[selection]}", false) {}.apply { isEnabled = enabled }
         button.setOnClickListener {
@@ -5609,7 +5645,14 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                     }
                 }.setNegativeButton(getString(R.string.cancel), null).show()
         }
-        parent.addView(button, matchButton(0, 60)); parent.addView(space(12))
+        val params = matchButton(0, SETTINGS_CHOICE_MIN_HEIGHT_DP)
+        if (growForText) {
+            params.height = ViewGroup.LayoutParams.WRAP_CONTENT
+            button.minHeight = dp(SETTINGS_CHOICE_MIN_HEIGHT_DP)
+            button.setPaddingRelative(button.paddingStart, dp(SETTINGS_CHOICE_TEXT_INSET_DP),
+                button.paddingEnd, dp(SETTINGS_CHOICE_TEXT_INSET_DP))
+        }
+        parent.addView(button, params); parent.addView(space(12))
     }
     private fun card() = column().apply { background = rounded(SURFACE, BORDER); setPadding(dp(24), dp(24), dp(24), dp(24)) }
     private fun column() = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; layoutParams = LinearLayout.LayoutParams(-1, -2) }
@@ -5982,5 +6025,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         private const val NOTE_LINE_GAP_DP = 4
         private const val NOTE_ATTACH_GAP_DP = 6
         private const val SETTINGS_BLOCK_GAP_DP = 16
+        private const val SETTINGS_CHOICE_MIN_HEIGHT_DP = 60
+        private const val SETTINGS_CHOICE_TEXT_INSET_DP = 8
     }
 }

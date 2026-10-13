@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_geely_capabilities">Geely compatibility (experimental)</string>
+    <string name="settings_geely_input">Unknown head-unit input bridge (experimental)</string>
+    <string name="settings_geely_input_description">Allow the Geely input service on an unverified head unit. Requires an accessible service; applies at the next CarPlay connection. Known hardware uses automatic detection.</string>
+    <string name="settings_geely_siri_source">Siri microphone source (experimental)</string>
+    <string name="settings_geely_auto">Automatic</string>
+    <string name="settings_geely_standard">Standard · voice recognition</string>
+    <string name="settings_geely_compatible">Compatible · voice communication</string>
+    <string name="settings_geely_siri_description">Applies to the next Siri request. Automatic uses the compatible source only for the known upstream hardware profile. Phone-call microphone behavior is unchanged.</string>
+    <string name="settings_geely_hud_display">Navigation display (experimental)</string>
+    <string name="settings_geely_hud_off">Off</string>
+    <string name="settings_geely_hud_unavailable">This display is no longer available.</string>
+    <string name="settings_geely_hud_description">Choose an Android-visible secondary display manually. Navigation cues only; no full map or OEM HUD protocol. Selection is temporary and clears on disconnect or display removal. If none is listed, the OEM interface is not exposed to this app.</string>
+</resources>

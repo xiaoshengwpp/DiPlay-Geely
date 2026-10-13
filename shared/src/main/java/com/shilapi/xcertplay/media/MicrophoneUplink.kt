@@ -29,6 +29,7 @@ internal class MicrophoneUplink(
     private val config: MicrophoneConfig,
     private val onDiagnostic: (String) -> Unit = {},
     private val speakerphoneCall: Boolean = false,
+    private val siriMicrophoneSource: SiriMicrophoneSource = SiriMicrophoneSource.AUTO,
     /** The call's far-end audio; when set, telephony capture runs DiPlay's own echo canceller. */
     private val echoReference: EchoReference? = null,
     private val echoCancellerFactory: (Int, Int, Int) -> CallEchoCanceller? = { frame, rate, tail ->
@@ -58,6 +59,11 @@ internal class MicrophoneUplink(
     fun start(): Boolean {
         if (!running.compareAndSet(false, true)) return true
 
+        val source = microphoneAudioSource(config.audioType, speakerphoneCall, siriMicrophoneSource)
+        if (config.audioType == "speechrecognition" && source == MediaRecorder.AudioSource.VOICE_COMMUNICATION) {
+            stats.useVoiceCommunicationSource()
+        }
+
         val channelMask = if (config.channels >= 2) {
             AndroidAudioFormat.CHANNEL_IN_STEREO
         } else {
@@ -75,7 +81,6 @@ internal class MicrophoneUplink(
             return false
         }
 
-        val source = microphoneAudioSource(config.audioType, speakerphoneCall)
         val nextEncoder = if (config.codec == AudioCodecKind.OPUS) {
             opusEncoderFactory(config.bitrate ?: 48_000)
         } else {
@@ -488,17 +493,15 @@ internal class CaptureClock(private val sampleRate: Int) {
     }
 }
 
-/** Source selection keeps the independently gated Geely override out of core capture. */
-internal fun microphoneAudioSource(audioType: String, speakerphoneCall: Boolean): Int = when {
+/** The independent Siri choice never changes telephony, speakerphone or generic capture. */
+internal fun microphoneAudioSource(
+    audioType: String,
+    speakerphoneCall: Boolean,
+    siriSource: SiriMicrophoneSource = SiriMicrophoneSource.AUTO,
+    knownHardware: Boolean = com.shilapi.xcertplay.network.GeelyHeadUnit.detected,
+): Int = when {
     audioType == "telephony" && speakerphoneCall -> MediaRecorder.AudioSource.MIC
     audioType == "telephony" -> MediaRecorder.AudioSource.VOICE_COMMUNICATION
-    // The upstream vendor workaround needs its own verification; model detection cannot enable it.
-    audioType == "speechrecognition" ->
-        if (com.shilapi.xcertplay.hud.GeelyVendorPolicy.geelyMicrophoneOverride &&
-            com.shilapi.xcertplay.network.GeelyHeadUnit.detected) {
-            MediaRecorder.AudioSource.VOICE_COMMUNICATION
-        } else {
-            MediaRecorder.AudioSource.VOICE_RECOGNITION
-        }
+    audioType == "speechrecognition" -> siriSource.audioSource(knownHardware)
     else -> MediaRecorder.AudioSource.MIC
 }

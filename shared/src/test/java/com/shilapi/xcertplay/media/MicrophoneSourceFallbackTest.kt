@@ -1,5 +1,6 @@
 package com.shilapi.xcertplay.media
 
+import android.content.Context
 import android.Manifest
 import android.media.AudioManager
 import android.media.AudioAttributes
@@ -42,6 +43,7 @@ class MicrophoneSourceFallbackTest {
     private lateinit var sink: AndroidMediaSink
 
     @Before fun setUp() {
+        context.getSharedPreferences("diplay_siri_microphone", Context.MODE_PRIVATE).edit().clear().commit()
         RecorderBuilder.attempts.clear()
         RecorderBuilder.built.clear()
         RecorderBuilder.rejectSources = emptySet()
@@ -63,7 +65,32 @@ class MicrophoneSourceFallbackTest {
 
     @After fun tearDown() {
         sink.close()
+        context.getSharedPreferences("diplay_siri_microphone", Context.MODE_PRIVATE).edit().clear().commit()
         ShadowAudioRecord.clearSource()
+    }
+
+    @Test fun persistedCompatibleChoiceStartsCommunicationDirectlyWithCorrectDiagnostics() {
+        SiriMicrophoneSettings.save(context, SiriMicrophoneSource.COMPATIBLE)
+
+        sink.onMicrophoneStarted(id, config("speechrecognition"))
+
+        assertTrue(captureStarted.await(5, TimeUnit.SECONDS))
+        assertEquals(listOf(MediaRecorder.AudioSource.VOICE_COMMUNICATION), RecorderBuilder.attempts)
+        assertEquals(MediaRecorder.AudioSource.VOICE_COMMUNICATION, requireNotNull(captured.get()).audioSource)
+        assertEquals(AudioManager.MODE_RINGTONE, context.getSystemService(AudioManager::class.java).mode)
+        assertTrue(ShadowAudioEffect.getAudioEffects().isEmpty())
+        assertTrue(diagnostics.any { it.startsWith("Microphone: start type=speechrecognition source=VOICE_COMMUNICATION") })
+    }
+
+    @Test fun compatibleChoiceDoesNotRetryTheKnownSilentRecognitionSource() {
+        SiriMicrophoneSettings.save(context, SiriMicrophoneSource.COMPATIBLE)
+        RecorderBuilder.rejectSources = setOf(MediaRecorder.AudioSource.VOICE_COMMUNICATION)
+
+        sink.onMicrophoneStarted(id, config("speechrecognition"))
+
+        assertEquals(listOf(MediaRecorder.AudioSource.VOICE_COMMUNICATION), RecorderBuilder.attempts)
+        assertNull(captured.get())
+        assertTrue(diagnostics.any { it.contains("source=VOICE_COMMUNICATION") && it.contains("stage=RECORDER_CREATION") })
     }
 
     @Test fun siriCreationFailureRetriesCommunicationOnceWithoutCallEffectsOrModeChanges() {

@@ -67,6 +67,25 @@ class CarPlayMediaCallbackTest {
         assertEquals(listOf(CarPlayMediaButton.NEXT), sent)
     }
 
+    @Test fun ownedHardwareReleaseRemainsConsumedAfterCallGuardChanges() {
+        var allowed = true
+        val guarded = CarPlayMediaCallback(canHandleHardware = { allowed }) { index, _ -> sent += index }
+        assertEquals(true, guarded.onMediaButtonEvent(button(KeyEvent(100, 100, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_NEXT, 0))))
+        allowed = false
+        assertEquals(true, guarded.onMediaButtonEvent(button(KeyEvent(100, 101, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_NEXT, 1))))
+        assertEquals(true, guarded.onMediaButtonEvent(button(KeyEvent(100, 102, KeyEvent.ACTION_UP, KeyEvent.KEYCODE_MEDIA_NEXT, 0))))
+        assertEquals(false, guarded.onMediaButtonEvent(button(KeyEvent(200, 200, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_NEXT, 0))))
+        assertEquals(listOf(CarPlayMediaButton.NEXT), sent)
+    }
+
+    @Test fun duplicateInitialDownIsNotAnotherTapButNewDownTimeIs() {
+        val first = button(KeyEvent(100, 100, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_NEXT, 0))
+        callback.onMediaButtonEvent(first)
+        callback.onMediaButtonEvent(first)
+        callback.onMediaButtonEvent(button(KeyEvent(200, 200, KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_MEDIA_NEXT, 0)))
+        assertEquals(listOf(CarPlayMediaButton.NEXT, CarPlayMediaButton.NEXT), sent)
+    }
+
     @Test
     fun nowPlayingFieldsBecomeAndroidMediaMetadata() {
         val artwork = Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888)

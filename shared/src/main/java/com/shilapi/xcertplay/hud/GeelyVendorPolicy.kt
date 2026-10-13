@@ -3,17 +3,18 @@ package com.shilapi.xcertplay.hud
 /**
  * This fork targets unverified Geely head units. BYD-specific integrations must not
  * run merely because a package, display name, fingerprint or old preference matches.
- * These are build-time product boundaries, not user-toggleable compatibility claims.
+ * BYD gates are product boundaries. Geely adapter flags only make capability-gated implementations
+ * available; they do not assert that a particular vehicle is supported.
  * Core CarPlay transport, authentication, audio and main-screen rendering are unchanged.
  */
 object GeelyVendorPolicy {
     const val PROFILE = "geely-experimental"
-    // Upstream 0.2.18 vendor entry points remain unverified for this product.
-    val geelyInput: Boolean = false
-    val geelyMicrophoneOverride: Boolean = false
+    // Available adapters still require their own runtime capability and lifecycle checks.
+    val geelyInput: Boolean = true
+    val geelyMicrophoneOverride: Boolean = true
     val phoneAudioRoute: Boolean = false
     val fceCluster: Boolean = false
-    val foregroundMediaKeys: Boolean = false
+    val foregroundMediaKeys: Boolean = true
     val bydNavigation: Boolean = false
     val bydCluster: Boolean = false
     val bydClusterSong: Boolean = false

@@ -1,5 +1,7 @@
 # Geely 0.2.18 source integration review
 
+Historical record of the initial 0.2.18 integration and inactive-backend cleanup. The subsequent [capability-adapter review](GEELY-CAPABILITY-ADAPTERS.md) supersedes the Geely input, Siri source, standard foreground-key and public secondary-display limitations described below; BYD/ADB mutation and unverified Telecom boundaries remain. This record is not a current real-vehicle compatibility claim.
+
 ## Exact sources and scope
 
 - Validated Geely 0.2.16 baseline: `f8756aa571573a6618dd705df447f6a5a1d88343` (PR #7).

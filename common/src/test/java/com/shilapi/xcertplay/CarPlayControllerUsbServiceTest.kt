@@ -12,6 +12,11 @@ import com.shilapi.xcertplay.hud.BydNavigationOutputs
 import com.shilapi.xcertplay.orchestration.*
 import com.shilapi.xcertplay.transport.Iap2IdentificationConfig
 import com.shilapi.xcertplay.transport.UsbDeviceId
+import com.shilapi.xcertplay.glance.CarPlayGlance
+import com.shilapi.xcertplay.iap2.message.Iap2Messages
+import com.shilapi.xcertplay.iap2.wire.Iap2Frame
+import org.mockito.Mockito.mock
+import org.robolectric.util.ReflectionHelpers
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Test
@@ -32,6 +37,65 @@ class CarPlayControllerUsbServiceTest {
     @After fun tearDown() {
         controllers.forEach { it.close(); assertTrue(it.awaitClosed(2_000)) }
         BydNavigationOutputs.endNow()
+    }
+
+    @Test fun neutralCallInputFollowsControllerSessionAndRejectsRetiredChannels() {
+        val controller = controller(UsbContext(false), CarPlayTransport.WIRELESS, MfiTarget.LOCAL)
+        val listener = ReflectionHelpers.getField<AirPlaySessionListener>(controller, "sessionListener")
+        val route = controller.javaClass.getDeclaredMethod("onRouteFrame", Iap2Frame::class.java,
+            kotlin.jvm.functions.Function0::class.java).apply { isAccessible = true }
+        val ringing = Iap2Messages.buildRaw(0x4155) { u8(2, 2); string(4, "call") }
+        fun receive(currentChannel: Boolean = true) {
+            route.invoke(controller, ringing, { currentChannel })
+        }
+        val first = mock(AirPlaySession::class.java)
+        val replacement = mock(AirPlaySession::class.java)
+        receive()
+        assertFalse(CarPlayCallGuard.inCall())
+        listener.onSessionActive(first)
+        receive(false)
+        assertFalse(CarPlayCallGuard.inCall())
+        receive()
+        assertTrue(CarPlayCallGuard.inCall())
+        listener.onSessionActive(replacement)
+        assertFalse(CarPlayCallGuard.inCall())
+        receive(false)
+        assertFalse(CarPlayCallGuard.inCall())
+        receive()
+        listener.onSessionEnded(first)
+        assertTrue(CarPlayCallGuard.inCall())
+        listener.onSessionEnded(replacement)
+        receive()
+        assertFalse(CarPlayCallGuard.inCall())
+        listener.onSessionActive(replacement)
+        receive()
+        assertTrue(CarPlayCallGuard.inCall())
+        controller.close()
+        receive()
+        listener.onSessionActive(first)
+        assertFalse(CarPlayCallGuard.inCall())
+    }
+
+    @Test fun replacingLiveSessionClearsGlanceAndExpiresConsentButRepeatedActiveDoesNot() {
+        val controller = controller(UsbContext(false), CarPlayTransport.WIRELESS, MfiTarget.LOCAL)
+        val listener = ReflectionHelpers.getField<AirPlaySessionListener>(controller, "sessionListener")
+        val first = mock(AirPlaySession::class.java)
+        listener.onSessionActive(first)
+        CarPlayGlance.onFrame(Iap2Messages.buildRaw(0x5001) { group(0) { string(1, "Old phone") } })
+        CarPlayGlance.onFrame(Iap2Messages.buildRaw(0x5202) { u16(1, 7); u8(3, 2); string(4, "Old road") })
+        CarPlayGlance.onFrame(Iap2Messages.buildRaw(0x5201) { u8(1, 1); u16List(0x0d, listOf(7)) })
+        val initial = CarPlayGlance.snapshot()
+        assertEquals("Old phone", initial.song)
+        assertEquals("Old road", initial.road)
+        listener.onSessionActive(first)
+        assertEquals(initial, CarPlayGlance.snapshot())
+        listener.onSessionActive(mock(AirPlaySession::class.java))
+        val next = CarPlayGlance.snapshot()
+        assertTrue(next.connected)
+        assertEquals(initial.disconnectEpoch + 1, next.disconnectEpoch)
+        assertNull(next.song)
+        assertNull(next.maneuverType)
+        assertEquals("", next.road)
     }
 
     @Test fun wirelessLocalCanBeCreatedAndReachMfiWithoutAUsbService() {

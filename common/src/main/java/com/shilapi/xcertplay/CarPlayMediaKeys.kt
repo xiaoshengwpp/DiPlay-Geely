@@ -68,6 +68,7 @@ internal object CarPlayMediaKeys {
     private var artwork: Bitmap? = null
     private val artworkCache = LinkedHashMap<Int, Bitmap?>()
     private var placeholder: Bitmap? = null
+    private val mediaDispatch = CarPlayMediaInputDeduplicator()
 
     @Synchronized
     fun attach(context: Context, next: CarPlayController) {
@@ -77,7 +78,7 @@ internal object CarPlayMediaKeys {
         }
         appContext = context.applicationContext
         controller = next
-        GeelyWheelKeys.start(context)
+        GeelyWheelKeys.start(context, next)
         com.shilapi.xcertplay.media.AmbientMusicController.claimPlaybackOwner(next)
         next.playbackListener = { playing ->
             com.shilapi.xcertplay.media.AmbientMusicController.phonePlaybackChanged(next, playing)
@@ -339,6 +340,8 @@ internal object CarPlayMediaKeys {
     }
 
     private fun releaseLocked() {
+        mediaDispatch.clear()
+        callback.clearPresses()
         focusOwner = null
         controller?.let(com.shilapi.xcertplay.media.AmbientMusicController::releasePlaybackOwner)
         artworkOwner = null
@@ -382,29 +385,74 @@ internal object CarPlayMediaKeys {
         )
     }
 
-    private fun send(index: Int, source: String) {
-        // While the car's video player is on screen the wheel drives it: a CarPlay play/pause would
-        // make the iPhone end the video session.
-        if (CarPlayVideo.onMediaKey(index)) {
-            Log.i(TAG, "media key $source -> car video player $index")
-            return
+    /** All software media paths share ownership, call and AVRCP guards before touching the phone. */
+    @Synchronized
+    private fun send(
+        index: Int,
+        source: String,
+        route: CarPlayMediaInputRoute,
+        expectedController: CarPlayController? = controller,
+        stillCurrent: () -> Boolean = { true },
+    ): Boolean {
+        val active = controller ?: return false
+        val context = appContext ?: return false
+        if (active !== expectedController || !stillCurrent()) return false
+        val token = active.activeAirPlaySessionToken() ?: return false
+        if (inCall(context) || AirPlayPersistence.loadCarBluetoothAudio(context)) return false
+        if (!mediaDispatch.shouldSend(token, index, route, SystemClock.elapsedRealtime())) {
+            Log.d(TAG, "media key duplicate source=$source index=$index")
+            return true
         }
-        val sent = synchronized(this) { controller }?.sendMediaButton(index) ?: false
-        Log.i(TAG, "media key $source -> CarPlay $index sent=$sent")
+        // A local video player keeps ownership before a CarPlay command can end its stream.
+        val sent = if (CarPlayVideo.onMediaKey(index)) {
+            Log.i(TAG, "media key $source -> car video player $index")
+            true
+        } else {
+            active.sendMediaButton(index, token) {
+                synchronized(this) {
+                    controller === active && stillCurrent() && !inCall(context) &&
+                        !AirPlayPersistence.loadCarBluetoothAudio(context)
+                }
+            }.also {
+                Log.i(TAG, "media key $source -> CarPlay $index sent=$it")
+            }
+        }
+        if (sent) mediaDispatch.record(token, index, route, SystemClock.elapsedRealtime())
+        return sent
     }
 
-    /** A steering-wheel media key captured outside the Android key stream (Geely/Lynk). */
-    internal fun onExternalMediaKey(index: Int) = send(index, "geely-wheel")
+    internal fun onForegroundMediaKey(index: Int, expectedController: CarPlayController?): Boolean =
+        send(index, "foreground", CarPlayMediaInputRoute.FOREGROUND, expectedController)
 
-    /** The steering-wheel microphone key captured outside the Android key stream (Geely/Lynk). */
-    internal fun onExternalSiriKey(): Boolean {
-        val active = synchronized(this) { controller } ?: return false
-        return runCatching { active.requestSiri() }.getOrDefault(false)
+    /** A private callback may not act on a controller or bridge generation that replaced its owner. */
+    internal fun onExternalMediaKey(index: Int, expectedController: CarPlayController,
+        stillCurrent: () -> Boolean): Boolean =
+        send(index, "geely-wheel", CarPlayMediaInputRoute.GEELY_PRIVATE, expectedController, stillCurrent)
+
+    @Synchronized
+    internal fun onExternalSiriKey(expectedController: CarPlayController, stillCurrent: () -> Boolean): Boolean {
+        val active = controller ?: return false
+        val context = appContext ?: return false
+        val token = active.activeAirPlaySessionToken() ?: return false
+        if (active !== expectedController ||
+            !stillCurrent() || inCall(context)) return false
+        return runCatching {
+            active.requestSiri(token) {
+                synchronized(this) { controller === active && stillCurrent() && !inCall(context) }
+            }
+        }.getOrDefault(false)
     }
 
     private val callback = CarPlayMediaCallback(
         experimentalDiLink3Keys = { appContext?.let(BydOutputSettings::carPlayCallControls) == true },
-        send = ::send,
+        canHandleHardware = {
+            synchronized(this) {
+                controller?.activeAirPlaySessionToken() != null &&
+                    appContext?.let { !inCall(it) && !AirPlayPersistence.loadCarBluetoothAudio(it) } == true
+            }
+        },
+        sendHardware = { index, source -> send(index, source, CarPlayMediaInputRoute.MEDIA_SESSION) },
+        send = { index, source -> send(index, source, CarPlayMediaInputRoute.MEDIA_CONTROLLER); Unit },
     )
 
     /** Whether [next] changes what the media session's metadata shows; position and play state do not. */
@@ -514,15 +562,33 @@ internal object CarPlayMediaKeys {
  */
 internal class CarPlayMediaCallback(
     private val experimentalDiLink3Keys: () -> Boolean = { false },
+    private val canHandleHardware: () -> Boolean = { true },
+    private val sendHardware: ((index: Int, source: String) -> Unit)? = null,
     private val send: (index: Int, source: String) -> Unit,
 ) : MediaSession.Callback() {
+    private val hardwarePresses = mutableMapOf<Triple<Int, Int, Int>, Long>()
+
+    fun clearPresses() { hardwarePresses.clear() }
+
     override fun onMediaButtonEvent(mediaButtonIntent: Intent): Boolean {
         @Suppress("DEPRECATION")
         val event = mediaButtonIntent.getParcelableExtra<KeyEvent>(Intent.EXTRA_KEY_EVENT) ?: return false
+        if (event.action != KeyEvent.ACTION_DOWN && event.action != KeyEvent.ACTION_UP) return false
+        val key = Triple(event.deviceId, event.keyCode, event.scanCode)
+        val downTime = hardwarePresses[key]
+        if (downTime != null) {
+            if (event.action == KeyEvent.ACTION_UP) {
+                hardwarePresses.remove(key)
+                return true
+            }
+            if (event.repeatCount != 0 || event.downTime == downTime) return true
+        }
         val index = CarPlayMediaButton.forKeyCode(event.keyCode, experimentalDiLink3Keys())
             ?: return super.onMediaButtonEvent(mediaButtonIntent)
+        if (!canHandleHardware()) return false
         if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
-            send(index, KeyEvent.keyCodeToString(event.keyCode))
+            hardwarePresses[key] = event.downTime
+            (sendHardware ?: send)(index, KeyEvent.keyCodeToString(event.keyCode))
         }
         return true
     }
@@ -531,4 +597,54 @@ internal class CarPlayMediaCallback(
     override fun onPause() = send(CarPlayMediaButton.PAUSE, "pause")
     override fun onSkipToNext() = send(CarPlayMediaButton.NEXT, "next")
     override fun onSkipToPrevious() = send(CarPlayMediaButton.PREVIOUS, "previous")
+}
+
+
+internal enum class CarPlayMediaInputRoute { FOREGROUND, MEDIA_SESSION, MEDIA_CONTROLLER, GEELY_PRIVATE }
+
+/** Only coalesces echoes across routes, never two intentional taps arriving on the same route. */
+internal class CarPlayMediaInputDeduplicator {
+    private data class Press(val route: CarPlayMediaInputRoute, val atMillis: Long)
+    private var owner: Any? = null
+    private val recent = mutableMapOf<Int, Press>()
+
+    fun shouldSend(token: Any, index: Int, route: CarPlayMediaInputRoute, nowMillis: Long): Boolean {
+        if (owner !== token) clear()
+        val previous = recent[index] ?: return true
+        return previous.route == route || nowMillis - previous.atMillis !in 0..ECHO_WINDOW_MILLIS
+    }
+
+    fun record(token: Any, index: Int, route: CarPlayMediaInputRoute, nowMillis: Long) {
+        if (owner !== token) clear()
+        owner = token
+        recent[index] = Press(route, nowMillis)
+    }
+
+    fun clear() { owner = null; recent.clear() }
+
+    private companion object { const val ECHO_WINDOW_MILLIS = 150L }
+}
+
+/** A foreground track press owns its repeat/release even if a call or connection changes midway. */
+internal class CarPlayForegroundMediaKeys {
+    private val presses = mutableMapOf<Triple<Int, Int, Int>, Long>()
+
+    fun consumeContinuation(event: KeyEvent): Boolean {
+        if (event.action != KeyEvent.ACTION_DOWN && event.action != KeyEvent.ACTION_UP) return false
+        val key = Triple(event.deviceId, event.keyCode, event.scanCode)
+        if (key !in presses) return false
+        if (event.action == KeyEvent.ACTION_UP) presses.remove(key)
+        else if (event.repeatCount == 0 && event.downTime != presses[key]) return false // New tap.
+        return true
+    }
+
+    fun dispatch(event: KeyEvent, sessionActive: Boolean, inCall: Boolean, bluetoothAudio: Boolean,
+        send: (Int) -> Unit): Boolean {
+        if (consumeContinuation(event)) return true
+        if (event.action != KeyEvent.ACTION_DOWN || event.repeatCount != 0 || bluetoothAudio) return false
+        val index = CarPlayMediaButton.forCarPlayWindow(event.keyCode, sessionActive, inCall) ?: return false
+        presses[Triple(event.deviceId, event.keyCode, event.scanCode)] = event.downTime
+        send(index)
+        return true
+    }
 }

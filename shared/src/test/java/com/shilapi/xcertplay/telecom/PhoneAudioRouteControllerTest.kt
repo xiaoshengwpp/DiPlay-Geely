@@ -17,6 +17,7 @@ class PhoneAudioRouteControllerTest {
         var starts = 0
         var stops = 0
         var active = false
+        var failActiveQuery = false
 
         override fun start(): Boolean {
             starts++
@@ -29,7 +30,10 @@ class PhoneAudioRouteControllerTest {
             active = false
         }
 
-        override fun isActive() = active
+        override fun isActive(): Boolean {
+            check(!failActiveQuery) { "backend status unavailable" }
+            return active
+        }
     }
 
     private class FakeScheduler : RouteScheduler {
@@ -67,12 +71,16 @@ class PhoneAudioRouteControllerTest {
 
     @Test fun aCarPlayCallHoldsTheTelecomCallUntilItHasEnded() {
         val route = controller()
+        assertFalse("an enabled preference does not establish car-side AEC", route.carPlayCallsUseCarAudio())
         route.setWanted(PhoneAudioReason.CARPLAY_CALL, true)
         assertEquals(1, backend.starts)
+        assertTrue(route.carPlayCallsUseCarAudio())
         route.setWanted(PhoneAudioReason.CARPLAY_CALL, false)
         assertEquals("the call is kept for a moment", 0, backend.stops)
+        assertFalse("the release grace period cannot keep CarPlay AEC disabled", route.carPlayCallsUseCarAudio())
         scheduler.advance(PhoneAudioRouteController.RELEASE_DELAY_MILLIS)
         assertEquals(1, backend.stops)
+        assertFalse(route.carPlayCallsUseCarAudio())
     }
 
     @Test fun aCallStartingInsideTheReleaseDelayKeepsTheSameTelecomCall() {
@@ -138,7 +146,7 @@ class PhoneAudioRouteControllerTest {
     @Test fun aRefusedCallLeavesCarPlayCallsToDiPlaysOwnCancellerForAWhile() {
         backend.accept = false
         val route = controller()
-        assertTrue(route.carPlayCallsUseCarAudio())
+        assertFalse(route.carPlayCallsUseCarAudio())
         route.setWanted(PhoneAudioReason.CARPLAY_CALL, true)
         assertEquals(1, backend.starts)
         assertFalse(route.carPlayCallsUseCarAudio())
@@ -146,25 +154,66 @@ class PhoneAudioRouteControllerTest {
         route.setWanted(PhoneAudioReason.CARPLAY_CALL, true)
         assertEquals("no retry inside the back-off", 1, backend.starts)
         scheduler.advance(PhoneAudioRouteController.FAILURE_BACKOFF_MILLIS)
-        assertTrue(route.carPlayCallsUseCarAudio())
+        assertFalse("elapsed back-off is not proof of an active car-side route", route.carPlayCallsUseCarAudio())
         backend.accept = true
         route.setWanted(PhoneAudioReason.CARPLAY_CALL, false)
         route.setWanted(PhoneAudioReason.CARPLAY_CALL, true)
         assertEquals(2, backend.starts)
+        assertTrue(route.carPlayCallsUseCarAudio())
     }
 
     @Test fun aCallTheSystemEndedIsPlacedAgainWhileStillNeeded() {
         val route = controller()
         route.setWanted(PhoneAudioReason.CARPLAY_CALL, true)
+        assertTrue(route.carPlayCallsUseCarAudio())
         backend.active = false
+        assertFalse("a route lost by Telecom must immediately restore application AEC", route.carPlayCallsUseCarAudio())
         route.setWanted(PhoneAudioReason.VOIP_APP, true)
         assertEquals(2, backend.starts)
+        assertTrue(route.carPlayCallsUseCarAudio())
     }
 
-    @Test fun phoneAudioIsLeftToTheCarOnlyWhileTheCarPlaySettingIsOn() {
+    @Test fun phoneAudioIsLeftToTheCarOnlyWhileTheCarPlaySettingAndActiveCallAreBothOn() {
         val route = controller()
+        assertFalse(route.carPlayCallsUseCarAudio())
+        route.setWanted(PhoneAudioReason.CARPLAY_CALL, true)
         assertTrue(route.carPlayCallsUseCarAudio())
         enabled.remove(PhoneAudioReason.CARPLAY_CALL)
+        assertFalse(route.carPlayCallsUseCarAudio())
+    }
+
+    @Test fun anUnstartedQueuedBackendCannotDisableApplicationEchoCancellation() {
+        val pending = mutableListOf<() -> Unit>()
+        val queued = object : RouteScheduler {
+            override fun execute(block: () -> Unit) { pending += block }
+            override fun schedule(delayMillis: Long, block: () -> Unit) = scheduler.schedule(delayMillis, block)
+        }
+        val route = PhoneAudioRouteController(backend, queued, { it in enabled }, { scheduler.time })
+        route.setWanted(PhoneAudioReason.CARPLAY_CALL, true)
+        assertEquals(0, backend.starts)
+        assertFalse("wanted but not started must use application AEC", route.carPlayCallsUseCarAudio())
+        pending.toList().also { pending.clear() }.forEach { it() }
+        assertEquals(1, backend.starts)
+        assertTrue(route.carPlayCallsUseCarAudio())
+    }
+
+    @Test fun aVoipOnlyRouteCannotClaimCarPlayEchoCancellationEvenWhenTheSettingIsOn() {
+        val route = controller()
+        route.setWanted(PhoneAudioReason.VOIP_APP, true)
+        assertTrue(backend.active)
+        assertFalse(route.carPlayCallsUseCarAudio())
+        route.setWanted(PhoneAudioReason.CARPLAY_CALL, true)
+        assertTrue(route.carPlayCallsUseCarAudio())
+        route.setWanted(PhoneAudioReason.CARPLAY_CALL, false)
+        assertTrue("the other app still holds its route", backend.active)
+        assertFalse(route.carPlayCallsUseCarAudio())
+    }
+
+    @Test fun anUnavailableBackendStatusKeepsApplicationEchoCancellationEnabled() {
+        val route = controller()
+        route.setWanted(PhoneAudioReason.CARPLAY_CALL, true)
+        assertTrue(route.carPlayCallsUseCarAudio())
+        backend.failActiveQuery = true
         assertFalse(route.carPlayCallsUseCarAudio())
     }
 
