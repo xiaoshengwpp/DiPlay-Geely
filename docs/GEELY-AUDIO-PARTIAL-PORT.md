@@ -1,4 +1,6 @@
-# Host-independent audio fixes (partial upstream port)
+# Host-independent audio fixes (historical partial upstream port)
+
+This records the earlier audio-only integration. Current source sync scope is documented in [GEELY-UPSTREAM-20261013.md](GEELY-UPSTREAM-20261013.md).
 
 Source: upstream DiPlay `e06a250219b2c2288948d8b4ad7203b417db0de1`, selected audio changes only. Base: Geely main `99f3d29ace7d13ffb6a628c98d3ac76294f88602`.
 

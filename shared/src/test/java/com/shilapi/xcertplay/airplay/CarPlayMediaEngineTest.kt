@@ -2,8 +2,13 @@ package com.shilapi.xcertplay.airplay
 
 import java.io.Closeable
 import java.net.Socket
+import java.net.InetAddress
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import java.math.BigInteger
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -128,6 +133,109 @@ class CarPlayMediaEngineTest {
             }
         }
     }
+
+    @Test fun aLateOldSessionCloseCannotStopItsReplacementMicrophone() {
+        val stops = mutableListOf<AudioStreamId>()
+        val engine = CarPlayMediaEngine(object : MediaSink {
+            override fun onMicrophoneStopped(id: AudioStreamId) { stops += id }
+        })
+        val old = testSession()
+        val replacement = testSession()
+        val oldKey = CarPlayMediaEngine.StreamKey(old, 100, "speechrecognition")
+        val newKey = CarPlayMediaEngine.StreamKey(replacement, 100, "speechrecognition")
+        val oldConfig = microphoneConfig()
+        val newConfig = microphoneConfig()
+        try {
+            registerMicrophone(engine, oldKey, oldConfig)
+            assertTrue(startMicrophone(engine, oldKey, oldConfig) { true })
+            registerMicrophone(engine, newKey, newConfig)
+            assertEquals(listOf(AudioStreamId(100, "speechrecognition")), stops)
+            stops.clear()
+            engine.onSessionClosed(old)
+            assertTrue(stops.isEmpty())
+            assertFalse(startMicrophone(engine, oldKey, oldConfig) { error("Retired microphone started") })
+            assertTrue(startMicrophone(engine, newKey, newConfig) { true })
+            engine.onSessionClosed(replacement)
+            assertEquals(listOf(AudioStreamId(100, "speechrecognition")), stops)
+        } finally { old.close(); replacement.close() }
+    }
+
+    @Test fun closingOneSessionPreservesAnotherSessionsPendingMicrophone() {
+        val stops = mutableListOf<AudioStreamId>()
+        val engine = CarPlayMediaEngine(object : MediaSink {
+            override fun onMicrophoneStopped(id: AudioStreamId) { stops += id }
+        })
+        val first = testSession()
+        val second = testSession()
+        val firstKey = CarPlayMediaEngine.StreamKey(first, 100, "speechrecognition")
+        val secondKey = CarPlayMediaEngine.StreamKey(second, 100, "default")
+        val firstConfig = microphoneConfig()
+        val secondConfig = microphoneConfig().copy(audioType = "default")
+        try {
+            registerMicrophone(engine, firstKey, firstConfig)
+            registerMicrophone(engine, secondKey, secondConfig)
+            engine.onSessionClosed(first)
+            assertEquals(listOf(AudioStreamId(100, "speechrecognition")), stops)
+            assertTrue(startMicrophone(engine, secondKey, secondConfig) { true })
+        } finally {
+            engine.onSessionClosed(second)
+            first.close(); second.close()
+        }
+    }
+
+    @Test fun teardownWaitsForAnInFlightStartAndRejectsLateStarts() {
+        val events = CopyOnWriteArrayList<String>()
+        val engine = CarPlayMediaEngine(object : MediaSink {
+            override fun onMicrophoneStopped(id: AudioStreamId) { events += "stop" }
+        })
+        val session = testSession()
+        val key = CarPlayMediaEngine.StreamKey(session, 100, "speechrecognition")
+        val config = microphoneConfig()
+        val entered = CountDownLatch(1)
+        val resume = CountDownLatch(1)
+        val starts = Thread {
+            startMicrophone(engine, key, config) {
+                entered.countDown()
+                assertTrue(resume.await(5, TimeUnit.SECONDS))
+                events += "start"
+                true
+            }
+        }
+        val closes = Thread { engine.onSessionClosed(session) }
+        try {
+            registerMicrophone(engine, key, config)
+            starts.start()
+            assertTrue(entered.await(5, TimeUnit.SECONDS))
+            closes.start()
+            resume.countDown()
+            starts.join(5000)
+            closes.join(5000)
+            assertFalse(starts.isAlive)
+            assertFalse(closes.isAlive)
+            assertEquals(listOf("start", "stop"), events)
+            assertFalse(startMicrophone(engine, key, config) { error("Late microphone started") })
+        } finally {
+            resume.countDown()
+            starts.join(5000)
+            closes.join(5000)
+            engine.onSessionClosed(session)
+            session.close()
+        }
+    }
+
+    private fun registerMicrophone(engine: CarPlayMediaEngine, key: CarPlayMediaEngine.StreamKey, config: MicrophoneConfig) {
+        CarPlayMediaEngine::class.java.getDeclaredMethod("registerMicrophone", CarPlayMediaEngine.StreamKey::class.java,
+            MicrophoneConfig::class.java).apply { isAccessible = true }.invoke(engine, key, config)
+    }
+
+    private fun startMicrophone(engine: CarPlayMediaEngine, key: CarPlayMediaEngine.StreamKey,
+        config: MicrophoneConfig, start: () -> Boolean): Boolean =
+        CarPlayMediaEngine::class.java.getDeclaredMethod("startMicrophoneIfCurrent", CarPlayMediaEngine.StreamKey::class.java,
+            MicrophoneConfig::class.java, kotlin.jvm.functions.Function0::class.java).apply { isAccessible = true }
+            .invoke(engine, key, config, start) as Boolean
+
+    private fun microphoneConfig() = MicrophoneConfig("speechrecognition", 16_000, 1, 100, 20,
+        InetAddress.getLoopbackAddress(), 9, ByteArray(32))
 
     private fun testSession(videoInCar: Boolean = false): AirPlaySession = AirPlaySession(
         socket = Socket(),

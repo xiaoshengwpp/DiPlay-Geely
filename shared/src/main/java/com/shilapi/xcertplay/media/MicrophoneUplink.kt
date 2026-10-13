@@ -23,7 +23,7 @@ import com.shilapi.xcertplay.telecom.PhoneAudioRoute
  * Captures one PCM microphone stream and sends it back to the phone as sealed CarPlay RTP.
  *
  * The recorder runs only while the matching audio stream is active, so callers start this after
- * the first downlink audio packet and close it on stream teardown.
+ * the first downlink audio packet (or a bounded wait for input-only streams) and close it on teardown.
  */
 internal class MicrophoneUplink(
     private val config: MicrophoneConfig,
@@ -43,6 +43,8 @@ internal class MicrophoneUplink(
             },
         )
     },
+    private val noAudioRestartMillis: Long = NO_AUDIO_RESTART_MILLIS,
+    private val restartPause: () -> Unit = { Thread.sleep(READ_RESTART_PAUSE_MILLIS) },
 ) : Closeable {
     private val running = AtomicBoolean(false)
     private val stats = MicrophoneCaptureStats(config, report = { message ->
@@ -55,8 +57,11 @@ internal class MicrophoneUplink(
     @Volatile private var effects: List<AudioEffect> = emptyList()
     @Volatile private var echoCanceller: CallEchoCanceller? = null
     private var thread: Thread? = null
+    private var closed = false // guarded by this; close is terminal, a failed start can still be retried.
 
+    @Synchronized
     fun start(): Boolean {
+        if (closed) return false
         if (!running.compareAndSet(false, true)) return true
 
         val source = microphoneAudioSource(config.audioType, speakerphoneCall, siriMicrophoneSource)
@@ -271,6 +276,9 @@ internal class MicrophoneUplink(
         val clock = canceller?.let { CaptureClock(config.sampleRate) }
         val reference = canceller?.let { ShortArray(it.frameSamples) }
         var filled = 0
+        var readRestarts = 0
+        var noAudioRestarts = 0
+        var lastAudioNs = System.nanoTime()
         try {
             while (running.get()) {
                 stats.reading()
@@ -282,12 +290,49 @@ internal class MicrophoneUplink(
                         Log.e(TAG, "microphone read failed code=$count")
                         stats.failure(MicrophoneFailureStage.READ, code = count)
                     }
+                    // The first read after a head unit enters call mode can fail with
+                    // ERROR_INVALID_OPERATION, and capture used to end there for the whole call
+                    // (#647). Restart recording a few times before giving up.
+                    if (running.get() && count != AudioRecord.ERROR_DEAD_OBJECT &&
+                        readRestarts < MAX_READ_RESTARTS && restartRecording(recorder)
+                    ) {
+                        readRestarts++
+                        filled = 0 // Never join PCM across a recording discontinuity.
+                        clock?.reset()
+                        lastAudioNs = System.nanoTime()
+                        stats.restarted(readRestarts, "read-error", routeType(recorder))
+                        continue
+                    }
                     return
                 }
                 if (count == 0) {
                     stats.flush(routeType = routeInfo)
+                    // A recorder that starts with no input device routed returns 0 bytes at once, for
+                    // as long as it runs: a Leapmotor T03 (Android 7.1) did this for minutes of Siri and
+                    // call capture (#566). Restart it, and pause between empty reads instead of spinning.
+                    val now = System.nanoTime()
+                    if (running.get() && noAudioRestarts < MAX_NO_AUDIO_RESTARTS &&
+                        now - lastAudioNs >= noAudioRestartMillis * 1_000_000L
+                    ) {
+                        noAudioRestarts++
+                        lastAudioNs = now
+                        if (restartRecording(recorder)) {
+                            filled = 0
+                            clock?.reset()
+                            lastAudioNs = System.nanoTime()
+                            stats.restarted(noAudioRestarts, "no-audio", routeType(recorder))
+                        } else {
+                            if (running.get()) {
+                                stats.failure(MicrophoneFailureStage.RECORDING, code = recorder.recordingState)
+                            }
+                            return
+                        }
+                    } else {
+                        Thread.sleep(EMPTY_READ_PAUSE_MILLIS)
+                    }
                     continue
                 }
+                lastAudioNs = System.nanoTime()
                 var offset = 0
                 while (offset < count && running.get()) {
                     val copied = minOf(frame.size - filled, count - offset)
@@ -312,6 +357,7 @@ internal class MicrophoneUplink(
                                 canceller = null
                             }
                         }
+                        stats.level(frame)
                         sendFrame(socket, counters, frame)
                         filled = 0
                     }
@@ -325,9 +371,25 @@ internal class MicrophoneUplink(
             }
         } finally {
             stats.flush(ended = true, routeType = routeInfo)
-            running.set(false)
             release()
         }
+    }
+
+    private fun restartRecording(recorder: AudioRecord): Boolean = try {
+        synchronized(this) {
+            if (!running.get() || this.recorder !== recorder) return false
+            runCatching { recorder.stop() }
+        }
+        // Do not hold the lifecycle lock during the pause: close must be able to stop capture.
+        restartPause()
+        synchronized(this) {
+            // close and release use this same lock, so a retired recorder cannot restart afterward.
+            if (!running.get() || this.recorder !== recorder) return false
+            recorder.startRecording()
+            recorder.recordingState == AudioRecord.RECORDSTATE_RECORDING
+        }
+    } catch (error: IllegalStateException) {
+        false
     }
 
     private fun sendFrame(socket: DatagramSocket, counters: MicrophoneCounters, frame: ByteArray) {
@@ -399,21 +461,23 @@ internal class MicrophoneUplink(
     }
 
     override fun close() {
-        if (!running.compareAndSet(true, false)) {
-            release()
-            return
+        val worker = synchronized(this) {
+            closed = true
+            running.set(false)
+            try {
+                recorder?.stop()
+            } catch (_: Exception) {
+                // Best effort; release below is authoritative.
+            }
+            try {
+                socket?.close()
+            } catch (_: Exception) {
+                // Best effort.
+            }
+            thread
         }
-        try {
-            recorder?.stop()
-        } catch (_: Exception) {
-            // Best effort; release below is authoritative.
-        }
-        try {
-            socket?.close()
-        } catch (_: Exception) {
-            // Best effort.
-        }
-        thread?.let { worker ->
+        // The capture thread calls release under the same lock; never join it while holding that lock.
+        if (worker != null && worker !== Thread.currentThread()) {
             try {
                 worker.join(CLOSE_JOIN_MILLIS)
             } catch (_: InterruptedException) {
@@ -457,6 +521,11 @@ internal class MicrophoneUplink(
         const val CLOSE_JOIN_MILLIS = 500L
         const val ECHO_TAIL_MILLIS = 250
         const val ECHO_REFERENCE_LEAD_NS = 30_000_000L
+        const val MAX_READ_RESTARTS = 3
+        const val READ_RESTART_PAUSE_MILLIS = 50L
+        const val NO_AUDIO_RESTART_MILLIS = 1_000L
+        const val MAX_NO_AUDIO_RESTARTS = 3
+        const val EMPTY_READ_PAUSE_MILLIS = 5L
     }
 }
 
@@ -469,6 +538,13 @@ internal class CaptureClock(private val sampleRate: Int) {
     private var samplesRead = 0L
     private var lastReadSamples = 0
     private var lastReadEndNs = 0L
+
+    /** AudioRecord resets framePosition after stop/start; old sample counts must not survive it. */
+    fun reset() {
+        samplesRead = 0L
+        lastReadSamples = 0
+        lastReadEndNs = 0L
+    }
 
     fun read(recorder: AudioRecord, samples: Int) {
         samplesRead += samples

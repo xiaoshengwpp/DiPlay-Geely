@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="byd_integration_disabled_geely">この実験的な Geely ビルドでは、BYD 車両との連携は無効です。</string>
+    <string name="geely_navigation_audio_retained">既存のナビゲーション音声経路を維持</string>
+    <string name="geely_upstream_update_disabled">車両向けの安全上の制限を維持するため、この実験的な Geely ビルドでは公式の上流 APK による更新は無効です。</string>
+    <string name="settings_geely_auto">自動</string>
+    <string name="settings_geely_capabilities">Geely 互換性（実験的機能）</string>
+    <string name="settings_geely_compatible">互換 · 音声通話</string>
+    <string name="settings_geely_hud_description">Android から認識できる追加ディスプレイを手動で選択します。表示はナビゲーション案内のみで、地図全体やメーカー独自の HUD プロトコルには対応しません。選択は一時的で、接続の切断やディスプレイの取り外しで解除されます。候補がない場合、そのメーカーのインターフェースはこのアプリに公開されていません。</string>
+    <string name="settings_geely_hud_display">ナビゲーション表示先（実験的機能）</string>
+    <string name="settings_geely_hud_off">オフ</string>
+    <string name="settings_geely_hud_unavailable">このディスプレイは利用できなくなりました。</string>
+    <string name="settings_geely_input">未確認の車載機入力ブリッジ（実験的機能）</string>
+    <string name="settings_geely_input_description">未確認の車載機で Geely 入力サービスを許可します。アクセス可能なサービスが必要です。次回の CarPlay 接続から適用されます。既知の機器は自動検出されます。</string>
+    <string name="settings_geely_siri_description">次回の Siri 要求から適用されます。自動では、上流で確認済みの機器に限り互換音源を使用します。通話用マイクの動作は変わりません。</string>
+    <string name="settings_geely_siri_source">Siri マイク音源（実験的機能）</string>
+    <string name="settings_geely_standard">標準 · 音声認識</string>
+</resources>

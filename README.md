@@ -2,15 +2,15 @@
 
 本仓库直接 fork 自 [shihabal3amri/DiPlay](https://github.com/shihabal3amri/DiPlay)，面向 **吉利星越 L 2025 款（揽星）**开展社区适配，欢迎车主、开发者和测试者一起共建。“银河车机”只描述该目标车辆的系统背景，不表示覆盖银河品牌其他车型。
 
-**当前阶段：源码适配中，尚未实车验证。** 已在源码中隔离比亚迪专属能力并设置简体中文默认语言；尚未发布本分支的可安装 APK，也不声明任何车型已兼容。正式打包仍需所有者在私有构建环境安全提供既有、来源及授权明确的运行时认证资产和稳定 APK 签名输入。上游主要支持 BYD；其兼容性结论不能直接套用于星越 L。
+**当前阶段：源码适配中，尚未实车验证。** 已在源码中隔离比亚迪专属能力；新安装默认跟随系统语言，并保留已有语言选择。本次源码同步没有发布新 APK，也不声明任何车型已兼容。正式打包仍需所有者在私有构建环境安全提供既有、来源及授权明确的运行时认证资产和稳定 APK 签名输入。上游主要支持 BYD；其兼容性结论不能直接套用于星越 L。
 
 Community adaptation for the Geely Xingyue L 2025 Lanxing trim only. Not yet vehicle-tested; no verified compatibility or installable release is claimed. Galaxy references describe this target's head-unit background, not support for other Galaxy models.
 
-本次候选完整审查官方 `v0.2.18` 差异并保留吉利边界，详见[0.2.18 集成审查](docs/GEELY-0.2.18-REVIEW.md)。此审查分支尚未合并或发布。
+本次源码候选整合官方 0.2.19 及截至 `c30d3f0`（2026-10-13、PR #734）的后续修复，保留吉利适配与权限边界。整合范围、明确排除项和验证限制见[最新源码同步记录](docs/GEELY-UPSTREAM-20261013.md)。源码同步不等于发布或实车验证。
 
 ## 版本与下载
 
-本分支沿用原始上游版本，只增加星越 L 适配小版本：当前源码版本为 **`0.2.18-geely.1`**，发布标签为 **`v0.2.18-geely.1`**。同一上游版本后续为 `.2`、`.3`；升级原始上游版本时，适配序号从 `.1` 重新开始。版本源为 [`gradle/geely-version.properties`](gradle/geely-version.properties)，不按日期、构建次数或分支名生成。
+本分支沿用原始上游版本，只增加星越 L 适配小版本：当前源码候选版本为 **`0.2.19-geely.1`**；本次未创建发布标签或安装包。同一上游版本后续为 `.2`、`.3`；升级原始上游版本时，适配序号从 `.1` 重新开始。版本源为 [`gradle/geely-version.properties`](gradle/geely-version.properties)，不按日期、构建次数或分支名生成。
 
 - 可安装 APK 统一在[本仓库 GitHub Releases](https://github.com/xiaoshengwpp/DiPlay-Geely/releases)发布，使用普通 Release；`geely` 后缀表示适配分支，不强制标记 GitHub pre-release，也不另设“测试包”发布渠道
 - 发布包使用稳定签名与完整的获授权运行时输入；源码 CI 产物是无签名、无运行时认证的构建检查结果，不能当作可安装交付物
