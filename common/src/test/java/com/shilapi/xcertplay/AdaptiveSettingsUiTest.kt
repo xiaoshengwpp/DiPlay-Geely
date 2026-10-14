@@ -6,15 +6,20 @@ import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageInfo
 import android.graphics.drawable.ColorDrawable
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Rect
 import android.os.Looper
 import android.view.Surface
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.PopupWindow
 import android.widget.ScrollView
+import android.widget.SeekBar
 import android.widget.Switch
 import android.widget.TextView
 import com.shilapi.xcertplay.adb.LocalAdb
@@ -23,6 +28,8 @@ import com.shilapi.xcertplay.orchestration.WirelessHotspotMode
 import com.shilapi.xcertplay.orchestration.CarPlayController
 import com.shilapi.xcertplay.media.AndroidMediaSink
 import java.time.Duration
+import java.nio.file.Files
+import java.nio.file.Paths
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -37,6 +44,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.Mockito.mock
+import org.mockito.Mockito.verify
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
@@ -502,8 +510,8 @@ class AdaptiveSettingsUiTest {
     }
 
     @Test
-    @Config(sdk = [33], shadows = [HotspotSearchProbe::class])
-    fun hotspotSwitchStaysHiddenOffBydUnitsWithoutAnAppTetheringCall() {
+    @Config(sdk = [25, 33], shadows = [HotspotSearchProbe::class])
+    fun hotspotSwitchStaysHiddenOffBydUnitsWhereAndroidLetsNoAppStartTethering() {
         AirPlayPersistence.saveWirelessHotspotMode(context, WirelessHotspotMode.MANUAL)
         HotspotSearchProbe.workers.clear()
         HotspotSearchProbe.entered = CountDownLatch(1)
@@ -703,6 +711,8 @@ class AdaptiveSettingsUiTest {
 
         assertTrue(connection.any { it.startsWith(text(R.string.settings_usb_charging)) })
         assertFalse(advanced.any { it.startsWith(text(R.string.settings_usb_charging)) })
+        assertTrue(audio.any { it.startsWith(text(R.string.settings_navigation_attenuation)) })
+        assertFalse(advanced.any { it.startsWith(text(R.string.settings_navigation_attenuation)) })
         assertTrue(audio.any { it.startsWith(text(R.string.settings_music_buffer_wireless)) })
         assertTrue(audio.any { it.startsWith(text(R.string.settings_music_buffer_wired)) })
         listOf(R.string.main_buffered_audio, R.string.settings_car_bluetooth_audio, R.string.efficient_video, R.string.smooth_video, R.string.settings_direct_video_output, R.string.settings_low_latency_decoder, R.string.call_echo_cancellation, R.string.call_voice_filter, R.string.settings_disable_media_key_audio_focus, R.string.contrib_audio_home_toggle_audio_focus).forEach {
@@ -728,6 +738,159 @@ class AdaptiveSettingsUiTest {
         listOf(R.string.main_buffered_audio, R.string.efficient_video, R.string.smooth_video, R.string.settings_direct_video_output, R.string.settings_low_latency_decoder, R.string.call_echo_cancellation, R.string.call_voice_filter, R.string.settings_disable_media_key_audio_focus, R.string.right_hand_drive, R.string.car_button_in_carplay,
             R.string.side_panel, R.string.split_screen_areas, R.string.carplay_rotation).forEach {
             assertFalse(text(it), text(it) in display)
+        }
+    }
+
+    @Test fun navigationAttenuationSliderSavesAndUpdatesActiveAudioWithoutReconnect() {
+        val screen = openSettings()
+        val session = mock(CarPlayController::class.java)
+        val sink = mock(AndroidMediaSink::class.java)
+        var disconnects = 0
+        CarPlayBackgroundSession.store(session, sink, 800, 480, Any(),
+            CarPlaySessionDisplay(800, 480, Surface.ROTATION_0, false, false, 800, 480)) { disconnects++ }
+        CarPlayBackgroundSession.active = true
+        try {
+            PendingReconnect.clear()
+            ReflectionHelpers.setField(screen, "settingsCategory", SettingsCategory.AUDIO)
+            ReflectionHelpers.callInstanceMethod<Unit>(screen, "render")
+            val slider = descendants(screen.window.decorView).filterIsInstance<SeekBar>().single()
+            assertEquals(20, slider.max)
+            assertEquals(20, slider.progress)
+            val listener = SeekBar::class.java.getDeclaredField("mOnSeekBarChangeListener")
+                .apply { isAccessible = true }.get(slider) as SeekBar.OnSeekBarChangeListener
+            slider.progress = 7
+            listener.onProgressChanged(slider, 7, true)
+            assertEquals(-13, AirPlayPersistence.loadNavigationAudioAttenuationDb(context))
+            verify(sink).setNavigationAttenuationDb(-13)
+            assertFalse(PendingReconnect.isPending(session))
+            assertEquals(0, disconnects)
+            assertSame(session, CarPlayBackgroundSession.snapshot()?.controller)
+        } finally {
+            CarPlayBackgroundSession.clear()
+            PendingReconnect.clear()
+        }
+    }
+
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    @Test @Config(sdk = [29], qualifiers = "ja-w320dp-h600dp")
+    fun navigationSliderScreenshotCompactJapaneseLargeFont() = captureNavigationSlider("compact-ja", 1.3f)
+
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    @Test @Config(sdk = [29], qualifiers = "en-w1000dp-h700dp")
+    fun navigationSliderScreenshotExpandedLargeFont() = captureNavigationSlider("expanded-en", 1.3f)
+
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    @Test @Config(sdk = [29], qualifiers = "ar-ldrtl-w320dp-h600dp")
+    fun navigationSliderScreenshotCompactArabicRtlLargeFont() = captureNavigationSlider("compact-ar-rtl", 1.3f)
+
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    @Test @Config(sdk = [29], qualifiers = "ja-w320dp-h600dp")
+    fun japaneseAudioChoicesGrowOnTheActualNarrowSettingsPage() = verifyGrowingAudioChoices()
+
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    @Test @Config(sdk = [29], qualifiers = "ar-ldrtl-w320dp-h600dp")
+    fun arabicAudioChoicesGrowOnTheActualNarrowSettingsPage() = verifyGrowingAudioChoices()
+
+    private fun verifyGrowingAudioChoices() {
+        RuntimeEnvironment.setFontScale(1.3f)
+        val screen = openSettings()
+        ReflectionHelpers.setField(screen, "settingsCategory", SettingsCategory.AUDIO)
+        ReflectionHelpers.callInstanceMethod<Unit>(screen, "render")
+        layoutRoot(screen)
+        val labels = listOf(R.string.contrib_audio_home_media_channel_label,
+            R.string.contrib_audio_home_nav_channel_label, R.string.settings_music_buffer_wireless,
+            R.string.settings_music_buffer_wired)
+        for (label in labels) {
+            val choice = descendants(screen.window.decorView).filterIsInstance<Button>().single {
+                it.text.toString().startsWith(screen.getString(label))
+            }
+            assertEquals("Normalization must preserve deliberate text growth: ${choice.text}",
+                ViewGroup.LayoutParams.WRAP_CONTENT, choice.layoutParams.height)
+            val textLayout = requireNotNull(choice.layout)
+            assertTrue("The complete choice text must fit: ${choice.text}",
+                textLayout.getLineBottom(textLayout.lineCount - 1) <=
+                    choice.height - choice.compoundPaddingTop - choice.compoundPaddingBottom)
+            assertTrue((0 until textLayout.lineCount).all { textLayout.getEllipsisCount(it) == 0 })
+        }
+    }
+
+    private fun captureNavigationSlider(name: String, fontScale: Float) {
+        RuntimeEnvironment.setFontScale(fontScale)
+        val screen = openSettings()
+        ReflectionHelpers.setField(screen, "settingsCategory", SettingsCategory.AUDIO)
+        ReflectionHelpers.callInstanceMethod<Unit>(screen, "render")
+        // Capture through the content parent: on a compact screen the child is itself a ScrollView.
+        // Calling that child.draw() directly skips the scroll transform normally applied by its parent.
+        val capture = screen.findViewById<ViewGroup>(android.R.id.content)
+        val metrics = screen.resources.displayMetrics
+        shadowOf(Looper.getMainLooper()).idle()
+        capture.measure(
+            View.MeasureSpec.makeMeasureSpec(metrics.widthPixels, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(metrics.heightPixels, View.MeasureSpec.EXACTLY),
+        )
+        capture.layout(0, 0, metrics.widthPixels, metrics.heightPixels)
+        shadowOf(Looper.getMainLooper()).idle()
+        val scroll = ReflectionHelpers.getField<ScrollView>(screen, "rootScroll")
+        val scrollContent = scroll.getChildAt(0) as ViewGroup
+        val slider = descendants(capture).filterIsInstance<SeekBar>().single()
+        val gainRow = slider.parent as ViewGroup
+        val title = descendants(gainRow).filterIsInstance<TextView>().single {
+            it.text.toString() == screen.getString(R.string.settings_navigation_attenuation)
+        }
+        val value = descendants(gainRow).filterIsInstance<TextView>().single {
+            it.text.toString() == screen.getString(R.string.settings_navigation_attenuation_value, 0)
+        }
+        val description = descendants(capture).filterIsInstance<TextView>().single {
+            it.text.toString() == screen.getString(R.string.settings_navigation_attenuation_description)
+        }
+        fun bounds(ancestor: ViewGroup, view: View): Rect {
+            val origin = IntArray(2)
+            val location = IntArray(2)
+            ancestor.getLocationInWindow(origin)
+            view.getLocationInWindow(location)
+            val left = location[0] - origin[0]
+            val top = location[1] - origin[1]
+            return Rect(left, top, left + view.width, top + view.height)
+        }
+        val block = bounds(scrollContent, gainRow).apply { union(bounds(scrollContent, description)) }
+        val viewportHeight = scroll.height - scroll.paddingTop - scroll.paddingBottom
+        assertTrue("The complete navigation control should fit the viewport", block.height() <= viewportHeight)
+        scroll.scrollTo(0, (block.top - scroll.paddingTop).coerceAtLeast(0))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertSame("The captured page must remain the measured page", scroll,
+            ReflectionHelpers.getField<ScrollView>(screen, "rootScroll"))
+        // Explicit screenshot/scroll-viewport containment, rather than getGlobalVisibleRect(), which
+        // can pass even when a ScrollView is drawn without its parent's canvas transform.
+        val viewport = bounds(capture, scroll).apply {
+            left += scroll.paddingLeft
+            top += scroll.paddingTop
+            right -= scroll.paddingRight
+            bottom -= scroll.paddingBottom
+        }
+        assertTrue(viewport.intersect(Rect(0, 0, capture.width, capture.height)))
+        for (view in listOf(title, value, slider, description)) {
+            val rectangle = bounds(capture, view)
+            assertTrue("Navigation control has no measured area: $rectangle", rectangle.width() > 0 && rectangle.height() > 0)
+            assertTrue("Navigation control $rectangle must fit screenshot viewport $viewport", viewport.contains(rectangle))
+        }
+        for (view in listOf(title, value, description)) {
+            val textLayout = requireNotNull(view.layout)
+            assertTrue("Navigation text must not clip: ${view.text}",
+                textLayout.getLineBottom(textLayout.lineCount - 1) <=
+                    view.height - view.compoundPaddingTop - view.compoundPaddingBottom)
+            assertTrue((0 until textLayout.lineCount).all { textLayout.getEllipsisCount(it) == 0 })
+        }
+        assertEquals(0, capture.scrollY)
+        val bitmap = Bitmap.createBitmap(capture.width, capture.height, Bitmap.Config.ARGB_8888)
+        try {
+            capture.draw(Canvas(bitmap))
+            val output = Paths.get("build/reports/album-artwork-ui/navigation-audio/$name.png")
+            Files.createDirectories(output.parent)
+            Files.newOutputStream(output).use { stream ->
+                assertTrue(bitmap.compress(Bitmap.CompressFormat.PNG, 100, stream))
+            }
+        } finally {
+            bitmap.recycle()
         }
     }
 

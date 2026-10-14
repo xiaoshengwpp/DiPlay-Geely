@@ -56,4 +56,21 @@ class SiriMicrophoneSettingsTest {
             assertEquals(source.audioSource(known), microphoneAudioSource("speechrecognition", false, source, known))
         }
     }
+
+    @Test fun verifiedPhoneStateOnlyChangesNonGeelyCallsAndNeverTheSiriChoice() {
+        for (source in SiriMicrophoneSource.values()) for (known in listOf(false, true)) {
+            for (speakerphone in listOf(false, true)) {
+                val expectedCall = if (!known) MediaRecorder.AudioSource.VOICE_RECOGNITION
+                    else if (speakerphone) MediaRecorder.AudioSource.MIC
+                    else MediaRecorder.AudioSource.VOICE_COMMUNICATION
+                assertEquals(expectedCall,
+                    microphoneAudioSource("telephony", speakerphone, source, known, carPhoneState = true))
+                assertEquals(source.audioSource(known),
+                    microphoneAudioSource("speechrecognition", speakerphone, source, known, carPhoneState = true))
+                assertEquals(MediaRecorder.AudioSource.MIC,
+                    microphoneAudioSource("default", speakerphone, source, known, carPhoneState = true))
+            }
+        }
+    }
+
 }

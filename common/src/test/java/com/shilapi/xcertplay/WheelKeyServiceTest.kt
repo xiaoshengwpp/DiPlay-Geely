@@ -256,6 +256,20 @@ class WheelKeyServiceTest {
         service.requestSiri = { siriRequests++; true }
     }
 
+    @Test fun forgedLongPressPreferenceCannotEnableBydOrStandardVoiceKeys() {
+        val wheelPrefs = service.getSharedPreferences("diplay_wheel_map_zoom", Context.MODE_PRIVATE)
+        wheelPrefs.edit().putBoolean("siri_long_press_only", true).commit()
+        val before = wheelPrefs.all.toMap()
+        for (code in listOf(327, 328, 304, 312, KeyEvent.KEYCODE_VOICE_ASSIST)) {
+            assertFalse(key(code, true))
+            assertFalse(key(code, true, repeat = 1))
+            assertFalse(key(code, false))
+        }
+        assertFalse(WheelZoomSettings.siriLongPressOnly(service))
+        WheelZoomSettings.setSiriLongPressOnly(service, false)
+        assertEquals(before, wheelPrefs.all)
+    }
+
     @Test fun aHeldAssignedSiriKeyNeverOpensSiri() {
         siriSetUp()
         for (time in 0L..500L step 100) {

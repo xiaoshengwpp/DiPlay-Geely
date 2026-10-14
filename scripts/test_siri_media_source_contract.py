@@ -27,8 +27,10 @@ class SiriMediaSourceContractTest(unittest.TestCase):
     def test_non_siri_sources_keep_upstream_policy(self):
         text = (SHARED / 'media/MicrophoneUplink.kt').read_text()
         policy = text.split('internal fun microphoneAudioSource(', 1)[1]
-        self.assertIn('audioType == "telephony" && speakerphoneCall -> MediaRecorder.AudioSource.MIC', policy)
-        self.assertIn('audioType == "telephony" -> MediaRecorder.AudioSource.VOICE_COMMUNICATION', policy)
+        self.assertIn('audioType == "telephony" -> telephonyMicrophoneSource(speakerphoneCall, carPhoneState, knownHardware)', policy)
+        self.assertIn('carPhoneState && !geelyHeadUnit -> MediaRecorder.AudioSource.VOICE_RECOGNITION', text)
+        self.assertIn('speakerphoneCall -> MediaRecorder.AudioSource.MIC', text)
+        self.assertIn('else -> MediaRecorder.AudioSource.VOICE_COMMUNICATION', text)
         self.assertIn('audioType == "speechrecognition" -> siriSource.audioSource(knownHardware)', policy)
         self.assertIn('else -> MediaRecorder.AudioSource.MIC', policy)
         self.assertNotIn('GeelyVendorPolicy', policy)
@@ -71,6 +73,39 @@ class SiriMediaSourceContractTest(unittest.TestCase):
         self.assertIn('legacySiriPresses[physicalKey] = siriController to siriSession', text)
         body = text.split('private fun requestLegacySiri(', 1)[1].split('override fun onWindowFocusChanged', 1)[0]
         self.assertIn('controller !== expectedController || activeAirPlaySession !== expectedSession || inCall(this)', body)
+
+    def test_byd_voice_pair_cannot_capture_disabled_geely_or_standard_voice_sources(self):
+        text = (COMMON / 'CarPlayHostActivity.kt').read_text()
+        body = text.split('private fun requestLegacySiri(', 1)[1].split('override fun onWindowFocusChanged', 1)[0]
+        self.assertIn('if (GeelyVendorPolicy.bydAdb && keyCode != KeyEvent.KEYCODE_VOICE_ASSIST)', body)
+        self.assertIn('val token = expectedController.activeAirPlaySessionToken() ?: return', body)
+        self.assertIn('sendGenericKey(android.os.SystemClock.uptimeMillis(), token)', body)
+        self.assertIn('else expectedController.requestSiri()', body)
+        text = (COMMON / 'WheelKeyService.kt').read_text()
+        self.assertIn('fun siriLongPressOnly(context: Context): Boolean = GeelyVendorPolicy.bydAdb &&', text)
+        setter = text.split('fun setSiriLongPressOnly(', 1)[1].split('fun setSiriKey(', 1)[0]
+        self.assertLess(setter.index('if (!GeelyVendorPolicy.bydAdb) return'), setter.index('prefs(context).edit()'))
+
+    def test_voice_pair_records_only_successful_requests_in_the_same_session(self):
+        text = (COMMON / 'WheelKeyService.kt').read_text().split('class VoiceKeyPair {', 1)[1]
+        body = text.split('/** Settings for the wheel', 1)[0]
+        self.assertIn('if (session?.get() !== owner)', body)
+        self.assertIn('carPlayKeyMillis = null', body)
+        self.assertIn('genericKeyMillis = null', body)
+        self.assertLess(body.index('if (!send()) return false'), body.index('if (carPlay) carPlayKeyMillis = now'))
+
+    def test_byd_voice_hold_cleanup_keeps_only_owned_releases_until_unbind(self):
+        text = (COMMON / 'WheelKeyService.kt').read_text()
+        for method, end in [('override fun onUnbind(', 'override fun onDestroy('),
+                            ('override fun onDestroy(', 'override fun onAccessibilityEvent(')]:
+            self.assertIn('carPlayVoicePresses.clear()', text.split(method, 1)[1].split(end, 1)[0])
+        interrupt = text.split('override fun onInterrupt()', 1)[1].split('override fun onKeyEvent(', 1)[0]
+        self.assertIn('carPlayVoicePresses.values.forEach { it.owner = null }', interrupt)
+        event = text.split('override fun onKeyEvent(', 1)[1].split('private fun navigationKey(', 1)[0]
+        self.assertLess(event.index('if (!GeelyVendorPolicy.bydAdb) return false'), event.index('carPlayVoicePresses['))
+        self.assertIn('carPlayVoicePresses[physicalKey]?.downTime != event.downTime', event)
+        eligibility = text.split('private fun refreshEligibility()', 1)[1].split('private fun siriPress(', 1)[0]
+        self.assertIn('press.owner = null', eligibility)
 
     def test_private_siri_rejects_retired_session_and_calls(self):
         text = (COMMON / 'CarPlayMediaKeys.kt').read_text()

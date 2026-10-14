@@ -1549,7 +1549,17 @@ class CarPlayHostActivity : ComponentActivity() {
 
     private fun requestLegacySiri(keyCode: Int, expectedController: CarPlayController, expectedSession: AirPlaySession) {
         if (controller !== expectedController || activeAirPlaySession !== expectedSession || inCall(this)) return
-        val sent = expectedController.requestSiri()
+        if (CarPlayMediaButton.isShortVoiceKey(keyCode) && WheelZoomSettings.siriLongPressOnly(this)) return
+        // Pair only BYD's two enabled sources. Standard Android voice assist and Geely's
+        // separately opted-in input service must never inherit a disabled BYD source's debounce.
+        val sent = if (GeelyVendorPolicy.bydAdb && keyCode != KeyEvent.KEYCODE_VOICE_ASSIST) {
+            val token = expectedController.activeAirPlaySessionToken() ?: return
+            VoiceKeyPair.shared.sendGenericKey(android.os.SystemClock.uptimeMillis(), token) {
+                expectedController.requestSiri(token) {
+                    controller === expectedController && activeAirPlaySession === expectedSession && !inCall(this)
+                }
+            }
+        } else expectedController.requestSiri()
         appendLog("Siri: voice key $keyCode sent=$sent")
     }
 
@@ -4926,6 +4936,7 @@ class CarPlayHostActivity : ComponentActivity() {
             audioFocusAutoYield = AirPlayPersistence.loadAudioFocusAutoYield(this),
             mediaChannel = AirPlayPersistence.loadMediaAudioChannel(this),
             navigationChannel = AirPlayPersistence.loadNavigationAudioChannel(this),
+            navigationAttenuationDb = AirPlayPersistence.loadNavigationAudioAttenuationDb(this),
             context = this,
             navigationStreamType = navigationStreamType,
             onScreenStreamActiveChanged = { type, active ->

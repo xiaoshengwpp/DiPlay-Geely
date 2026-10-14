@@ -531,6 +531,19 @@ internal class MicrophoneUplink(
 }
 
 /**
+ * The recorder source for a CarPlay call. While DiPlay holds the car's phone audio state the car's call
+ * processing is on for every source, but VOICE_COMMUNICATION then clips (about a fifth of the samples on a
+ * Han) and the plain microphone source is muted. VOICE_RECOGNITION, which is also what the stock CarPlay
+ * service ends up with, gives a normal level with no clipping, and the car still suppresses the far end's
+ * echo on it. Geely/Lynk head units record silence on VOICE_RECOGNITION, so they keep the old choice.
+ */
+internal fun telephonyMicrophoneSource(speakerphoneCall: Boolean, carPhoneState: Boolean, geelyHeadUnit: Boolean): Int = when {
+    carPhoneState && !geelyHeadUnit -> MediaRecorder.AudioSource.VOICE_RECOGNITION
+    speakerphoneCall -> MediaRecorder.AudioSource.MIC
+    else -> MediaRecorder.AudioSource.VOICE_COMMUNICATION
+}
+
+/**
  * When each captured microphone sample was heard, on System.nanoTime's clock. Uses the recorder's
  * timestamp when the platform has one, otherwise assumes the newest sample arrived [FALLBACK_LATENCY_NS] ago.
  */
@@ -576,9 +589,9 @@ internal fun microphoneAudioSource(
     speakerphoneCall: Boolean,
     siriSource: SiriMicrophoneSource = SiriMicrophoneSource.AUTO,
     knownHardware: Boolean = com.shilapi.xcertplay.network.GeelyHeadUnit.detected,
+    carPhoneState: Boolean = PhoneAudioRoute.carPlayCallsUseCarAudio(),
 ): Int = when {
-    audioType == "telephony" && speakerphoneCall -> MediaRecorder.AudioSource.MIC
-    audioType == "telephony" -> MediaRecorder.AudioSource.VOICE_COMMUNICATION
+    audioType == "telephony" -> telephonyMicrophoneSource(speakerphoneCall, carPhoneState, knownHardware)
     audioType == "speechrecognition" -> siriSource.audioSource(knownHardware)
     else -> MediaRecorder.AudioSource.MIC
 }

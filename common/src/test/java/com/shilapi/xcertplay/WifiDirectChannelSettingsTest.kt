@@ -105,6 +105,19 @@ class WifiDirectChannelSettingsTest {
         assertEquals(149, config.wifiP2pPreferredChannel)
     }
 
+    @Test fun theGeelyWifiPageDoesNotOfferAnInactiveAdbScanToggle() {
+        prefs.edit().putBoolean("wifi_direct_scan_pause", true).commit()
+        fun texts(view: View): List<String> = buildList {
+            if (view is android.widget.TextView) add(view.text.toString())
+            if (view is ViewGroup) for (index in 0 until view.childCount) addAll(texts(view.getChildAt(index)))
+        }
+        for (mode in WirelessHotspotMode.entries) {
+            AirPlayPersistence.saveWirelessHotspotMode(activity, mode)
+            assertFalse(texts(controls()).contains(activity.getString(R.string.settings_wifi_direct_scan_pause)))
+        }
+        assertTrue(prefs.getBoolean("wifi_direct_scan_pause", false))
+    }
+
     private val choices get() = listOf(WifiP2pChannels.AUTO) + WifiP2pChannels.bandChoices + WifiP2pChannels.channels
 
     private fun select(dialog: AlertDialog, channel: Int) {
