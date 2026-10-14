@@ -57,5 +57,5 @@ class GeelyBoundaryContract(unittest.TestCase):
         from geely_version import read_version
         data=read_version()
         self.assertEqual((data['upstreamVersionName'],data['upstreamVersionCode'],data['versionName'],data['versionCode']),
-                         ('0.2.19',38,'0.2.19-geely.1',38001))
+                         ('0.2.20',39,'0.2.20-geely.1',39001))
 if __name__=='__main__':unittest.main()
