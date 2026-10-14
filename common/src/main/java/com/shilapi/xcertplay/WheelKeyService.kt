@@ -23,6 +23,7 @@ import com.shilapi.xcertplay.airplay.CarPlayMediaButton
 import com.shilapi.xcertplay.glance.CarPlayGlance
 import com.shilapi.xcertplay.host.R
 import com.shilapi.xcertplay.media.NavigationPlayback
+import com.shilapi.xcertplay.orchestration.CarPlayController
 import com.shilapi.xcertplay.hud.BydNavigationOutputs
 import com.shilapi.xcertplay.hud.BydOutputSettings
 
@@ -46,6 +47,8 @@ class WheelKeyService : AccessibilityService() {
     private val navigationKeys = NavigationWheelKeyPolicy()
     private val joystick = WheelJoystick()
     private val siriKey = WheelSiriKey()
+    private data class CarPlayVoicePress(val downTime: Long, var owner: Pair<CarPlayController, Any>?)
+    private val carPlayVoicePresses = mutableMapOf<PhysicalWheelKey, CarPlayVoicePress>()
     private val handler = Handler(Looper.getMainLooper())
     private var learning: WheelZoomSettings.Role? = null
     private var learnt: ((WheelZoomSettings.Role, WheelKey) -> Unit)? = null
@@ -103,6 +106,7 @@ class WheelKeyService : AccessibilityService() {
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
+        carPlayVoicePresses.clear()
         if (running === this) {
             running = null
             note("wheel key service unbound")
@@ -117,6 +121,7 @@ class WheelKeyService : AccessibilityService() {
     }
 
     override fun onDestroy() {
+        carPlayVoicePresses.clear()
         if (running === this) {
             running = null
             note("wheel key service destroyed")
@@ -130,7 +135,11 @@ class WheelKeyService : AccessibilityService() {
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) = Unit
 
-    override fun onInterrupt() { settingsChanged() }
+    override fun onInterrupt() {
+        // Keep only release ownership while still bound; interruption cancels the Siri action.
+        carPlayVoicePresses.values.forEach { it.owner = null }
+        settingsChanged()
+    }
 
     override fun onKeyEvent(event: KeyEvent): Boolean {
         if (!GeelyVendorPolicy.bydAdb) return false
@@ -146,12 +155,38 @@ class WheelKeyService : AccessibilityService() {
             rearmTimedMode()
             return true
         }
+        // A held voice key remains owned by the phone that accepted its initial DOWN.
+        // Its release is consumed, but cannot invoke Siri on a replacement session or during a call.
+        // A fresh DOWN supersedes a stale hold whose UP was lost during a device disconnect.
+        if (carPlayVoicePresses[physicalKey]?.downTime != event.downTime) carPlayVoicePresses.remove(physicalKey)
+        if (physicalKey in carPlayVoicePresses) {
+            if (!down) carPlayVoicePresses.remove(physicalKey)?.owner?.let { (owner, token) ->
+                if (BydOutputSettings.carPlayCallControls(this) && !inCall(this) &&
+                    CarPlayBackgroundSession.snapshot()?.controller === owner &&
+                    owner.activeAirPlaySessionToken() === token) {
+                    val shortPressIgnored = WheelZoomSettings.siriLongPressOnly(this) &&
+                        CarPlayMediaButton.isShortVoiceKey(event.keyCode)
+                    val sent = !shortPressIgnored && VoiceKeyPair.shared.sendCarPlayKey(event.eventTime, token) {
+                        owner.requestSiri(token) {
+                            BydOutputSettings.carPlayCallControls(this) && !inCall(this) &&
+                                CarPlayBackgroundSession.snapshot()?.controller === owner
+                        }
+                    }
+                    note("CarPlay voice key ${event.keyCode}: Siri sent=$sent")
+                }
+            }
+            return true
+        }
         if (navigationKeys.owns(event.keyCode, event.deviceId, event.downTime)) return navigationKey(event)
         if (CarPlayCallKeys.onKey(this, event.keyCode, down)) return true
         if (BydOutputSettings.carPlayCallControls(this) &&
-            CarPlayMediaButton.opensSiriWhileCarPlay(event.keyCode) && session() != null) {
-            if (!down) note("CarPlay voice key ${event.keyCode}: Siri sent=${CarPlayBackgroundSession.snapshot()?.controller?.requestSiri() == true}")
-            return true
+            CarPlayMediaButton.opensSiriWhileCarPlay(event.keyCode) && !inCall(this)) {
+            val owner = CarPlayBackgroundSession.snapshot()?.controller
+            val token = owner?.activeAirPlaySessionToken()
+            if (down && event.repeatCount == 0 && owner != null && token != null) {
+                carPlayVoicePresses[physicalKey] = CarPlayVoicePress(event.downTime, owner to token)
+                return true
+            }
         }
         val key = WheelKey.of(event)
         refreshEligibility()
@@ -250,6 +285,18 @@ class WheelKeyService : AccessibilityService() {
     private fun eligibleRoute(): Any? = if (WheelZoomSettings.enabled(this)) mapRoute() else null
 
     private fun refreshEligibility() {
+        if (carPlayVoicePresses.isNotEmpty()) {
+            val owner = CarPlayBackgroundSession.snapshot()?.controller
+            val token = owner?.activeAirPlaySessionToken()
+            val allowed = BydOutputSettings.carPlayCallControls(this) && !inCall(this)
+            carPlayVoicePresses.values.forEach { press ->
+                val captured = press.owner
+                if (!allowed || captured?.first !== owner || captured?.second !== token) {
+                    // Drop old phone references immediately, but consume the matching UP if it arrives.
+                    press.owner = null
+                }
+            }
+        }
         val joystickAllowed = WheelZoomSettings.joystick(this)
         if (!WheelZoomSettings.anyEnabled(this)) clearLearning()
         if (keys.updateEligibility(eligibleRoute())) handler.removeCallbacks(endTimedMode)
@@ -688,6 +735,47 @@ class WheelSiriKey {
     }
 }
 
+/**
+ * One press of BYD's voice key arrives as two keys: the CarPlay pair (327 short, 328 long) for the wheel key
+ * service and the generic pair (304 short, 312 long) for the CarPlay window, about half a second apart.
+ * Each opens Siri, and a second request ends the Siri session the first one began, so only the first of the
+ * two within [WINDOW_MILLIS] is sent. No Android types, so it is unit-tested.
+ */
+class VoiceKeyPair {
+    private var session: java.lang.ref.WeakReference<Any>? = null
+    private var carPlayKeyMillis: Long? = null
+    private var genericKeyMillis: Long? = null
+
+    fun sendCarPlayKey(nowMillis: Long, session: Any, send: () -> Boolean): Boolean =
+        take(nowMillis, session, carPlay = true, send = send)
+
+    fun sendGenericKey(nowMillis: Long, session: Any, send: () -> Boolean): Boolean =
+        take(nowMillis, session, carPlay = false, send = send)
+
+    @Synchronized
+    private fun take(now: Long, owner: Any, carPlay: Boolean, send: () -> Boolean): Boolean {
+        // A disconnected/replaced phone must not inherit another phone's suppressed voice key.
+        if (session?.get() !== owner) {
+            session = java.lang.ref.WeakReference(owner)
+            carPlayKeyMillis = null
+            genericKeyMillis = null
+        }
+        val other = if (carPlay) genericKeyMillis else carPlayKeyMillis
+        if (other != null && now - other in 0 until WINDOW_MILLIS) return false
+        // If the first source could not queue Siri, the other source still gets a chance.
+        if (!send()) return false
+        if (carPlay) carPlayKeyMillis = now else genericKeyMillis = now
+        return true
+    }
+
+    companion object {
+        const val WINDOW_MILLIS = 1_500L
+
+        /** Shared only by enabled BYD sources in the wheel key service and the CarPlay window. */
+        val shared = VoiceKeyPair()
+    }
+}
+
 /** Settings for the wheel's dashboard map zoom, CarPlay joystick and Siri key. */
 object WheelZoomSettings {
     private const val PREFS = "diplay_wheel_map_zoom"
@@ -696,6 +784,7 @@ object WheelZoomSettings {
     private const val KEY_JOYSTICK = "joystick"
     private const val KEY_JOYSTICK_AUTO_OFF = "joystick_auto_off"
     private const val KEY_SIRI = "siri_key"
+    private const val KEY_SIRI_LONG_ONLY = "siri_long_press_only"
     private const val BYD_KEYS = "simulate-keys"
     const val TIMED_MODE_MILLIS = 5_000L
     const val JOYSTICK_IDLE_MILLIS = 15_000L
@@ -750,6 +839,15 @@ object WheelZoomSettings {
     }
 
     fun siriKey(context: Context): Boolean = GeelyVendorPolicy.bydAdb && prefs(context).getBoolean(KEY_SIRI, false)
+
+    /** With this on, only the wheel's long press opens Siri; a short press of the voice key does nothing. */
+    fun siriLongPressOnly(context: Context): Boolean = GeelyVendorPolicy.bydAdb &&
+        prefs(context).getBoolean(KEY_SIRI_LONG_ONLY, false)
+
+    fun setSiriLongPressOnly(context: Context, enabled: Boolean) {
+        if (!GeelyVendorPolicy.bydAdb) return
+        prefs(context).edit().putBoolean(KEY_SIRI_LONG_ONLY, enabled).apply()
+    }
 
     fun setSiriKey(context: Context, enabled: Boolean) {
         if (!GeelyVendorPolicy.bydAdb) return

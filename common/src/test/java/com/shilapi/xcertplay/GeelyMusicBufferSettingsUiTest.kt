@@ -53,6 +53,10 @@ class GeelyMusicBufferSettingsUiTest {
                 assertTrue(texts.any { it.text.toString().contains(activity.getString(R.string.audio_routing)) })
                 assertTrue(texts.any { it.text.toString().contains(activity.getString(R.string.settings_music_buffer_wireless)) })
                 assertTrue(texts.any { it.text.toString().contains(activity.getString(R.string.settings_music_buffer_wired)) })
+                assertTrue(texts.any { it.text.toString() == activity.getString(R.string.settings_navigation_attenuation) })
+                val navigation = descendants(content).filterIsInstance<android.widget.SeekBar>().single()
+                assertEquals(20, navigation.max)
+                assertEquals(20, navigation.progress)
                 assertTrue(content.height > 0)
                 texts.filterIsInstance<Button>().forEach { button ->
                     val layout = requireNotNull(button.layout)

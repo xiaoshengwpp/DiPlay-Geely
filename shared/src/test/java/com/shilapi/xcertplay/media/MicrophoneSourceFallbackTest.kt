@@ -82,6 +82,23 @@ class MicrophoneSourceFallbackTest {
         assertTrue(diagnostics.any { it.startsWith("Microphone: start type=speechrecognition source=VOICE_COMMUNICATION") })
     }
 
+    @Test @Config(sdk = [30])
+    fun knownGeelyHardwareStillHonorsTheDriversExplicitStandardSiriSource() {
+        ReflectionHelpers.setStaticField(android.os.Build::class.java, "PRODUCT", "geely_fx11")
+        ReflectionHelpers.setStaticField(android.os.Build::class.java, "MODEL", "CS11_A4")
+        ReflectionHelpers.setStaticField(android.os.Build::class.java, "MANUFACTURER", "DesaySV")
+        assertTrue(com.shilapi.xcertplay.network.GeelyHeadUnit.detected)
+        SiriMicrophoneSettings.save(context, SiriMicrophoneSource.STANDARD)
+
+        sink.onMicrophoneStarted(id, config("speechrecognition"))
+
+        assertTrue(captureStarted.await(5, TimeUnit.SECONDS))
+        assertEquals(listOf(MediaRecorder.AudioSource.VOICE_RECOGNITION), RecorderBuilder.attempts)
+        assertEquals(MediaRecorder.AudioSource.VOICE_RECOGNITION, requireNotNull(captured.get()).audioSource)
+        assertEquals(AudioManager.MODE_RINGTONE, context.getSystemService(AudioManager::class.java).mode)
+        assertTrue(ShadowAudioEffect.getAudioEffects().isEmpty())
+    }
+
     @Test fun compatibleChoiceDoesNotRetryTheKnownSilentRecognitionSource() {
         SiriMicrophoneSettings.save(context, SiriMicrophoneSource.COMPATIBLE)
         RecorderBuilder.rejectSources = setOf(MediaRecorder.AudioSource.VOICE_COMMUNICATION)

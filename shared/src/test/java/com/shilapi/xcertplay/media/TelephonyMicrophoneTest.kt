@@ -12,6 +12,8 @@ import com.shilapi.xcertplay.airplay.AudioStreamId
 import com.shilapi.xcertplay.airplay.AudioFormat
 import com.shilapi.xcertplay.airplay.AudioCodecKind
 import com.shilapi.xcertplay.airplay.MicrophoneConfig
+import com.shilapi.xcertplay.hud.BydOutputSettings
+import com.shilapi.xcertplay.telecom.PhoneAudioRoute
 import java.net.InetAddress
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.CopyOnWriteArrayList
@@ -108,6 +110,33 @@ class TelephonyMicrophoneTest {
         assertEquals(2, ShadowAudioEffect.getAudioEffects().size)
         sink.onMicrophoneStopped(telephony)
         assertEquals(AudioManager.MODE_NORMAL, manager.mode)
+    }
+
+    @Test fun unverifiedOemPhoneStateCannotSwitchCallSourceOrDisablePlatformEffects() {
+        val legacy = context.getSharedPreferences("diplay_byd_outputs", 0)
+        legacy.edit().putBoolean("phone_audio_route_experimental", true).commit()
+        BydOutputSettings.setPhoneAudioRoute(context, true)
+        PhoneAudioRoute.attach(context)
+        PhoneAudioRoute.carPlayCall(true)
+        manager.mode = AudioManager.MODE_RINGTONE
+        try {
+            assertFalse(BydOutputSettings.phoneAudioRoute(context))
+            assertFalse(PhoneAudioRoute.carPlayCallsUseCarAudio())
+            sink.onMicrophoneStarted(telephony, config("telephony"))
+            val record = awaitCapture()
+            assertEquals(MediaRecorder.AudioSource.VOICE_COMMUNICATION, record.audioSource)
+            assertEquals(AudioManager.MODE_IN_COMMUNICATION, manager.mode)
+            assertEquals(2, ShadowAudioEffect.getAudioEffects().size)
+            assertTrue(ShadowAudioEffect.getAudioEffects().all { it.enabled })
+            sink.onMicrophoneStopped(telephony)
+            assertEquals(AudioRecord.STATE_UNINITIALIZED, record.state)
+            assertEquals(AudioManager.MODE_RINGTONE, manager.mode)
+            assertTrue(ShadowAudioEffect.getAudioEffects().isEmpty())
+        } finally {
+            PhoneAudioRoute.carPlayCall(false)
+            BydOutputSettings.setPhoneAudioRoute(context, false)
+            legacy.edit().clear().commit()
+        }
     }
 
     @Test fun anUnverifiedPauseFlagDoesNotSwitchCallAudioRouting() {

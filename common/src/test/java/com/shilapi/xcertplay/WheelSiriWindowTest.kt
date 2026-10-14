@@ -103,6 +103,50 @@ class WheelSiriWindowTest {
         verify(controller, times(3)).requestSiri()
     }
 
+    @Test fun bydLongPressPreferenceDefaultsOffAndCannotBeEnabledInTheGeelyProduct() {
+        val prefs = host.getSharedPreferences("diplay_wheel_map_zoom", Context.MODE_PRIVATE)
+        assertFalse(WheelZoomSettings.siriLongPressOnly(host))
+        val before = prefs.all.toMap()
+        WheelZoomSettings.setSiriLongPressOnly(host, true)
+        assertFalse(WheelZoomSettings.siriLongPressOnly(host))
+        assertEquals(before, prefs.all)
+    }
+
+    @Test fun forgedBydLongPressPreferenceCannotSwallowExistingGeelyWindowActions() {
+        val prefs = host.getSharedPreferences("diplay_wheel_map_zoom", Context.MODE_PRIVATE)
+        prefs.edit().putBoolean("siri_long_press_only", true).commit()
+        val before = prefs.all.toMap()
+        assertFalse(WheelZoomSettings.siriLongPressOnly(host))
+        for (code in listOf(KeyEvent.KEYCODE_VOICE_ASSIST,
+            CarPlayMediaButton.KEYCODE_BYD_AUTO_MEDIA_VOICE,
+            CarPlayMediaButton.KEYCODE_BYD_AUTO_MEDIA_VOICE_LONG)) {
+            assertTrue(host.dispatchKeyEvent(key(code, true)))
+            assertTrue(host.dispatchKeyEvent(key(code, false)))
+        }
+        verify(controller, times(3)).requestSiri()
+        assertEquals(before, prefs.all)
+    }
+
+    @Test fun disabledBydSourceCannotSuppressTheGenericWindowVoiceKey() {
+        val session = host.javaClass.getDeclaredField("activeAirPlaySession")
+            .apply { isAccessible = true }.get(host)!!
+        assertTrue(VoiceKeyPair.shared.sendCarPlayKey(android.os.SystemClock.uptimeMillis(), session) { true })
+        for (code in listOf(KeyEvent.KEYCODE_VOICE_ASSIST, CarPlayMediaButton.KEYCODE_BYD_AUTO_MEDIA_VOICE)) {
+            assertTrue(host.dispatchKeyEvent(key(code, true)))
+            assertTrue(host.dispatchKeyEvent(key(code, false)))
+        }
+        verify(controller, times(2)).requestSiri()
+    }
+
+    @Test fun anUnownedReleaseCannotOpenSiriAfterAConnectionStarts() {
+        field("activeAirPlaySession", null)
+        val code = CarPlayMediaButton.KEYCODE_BYD_AUTO_MEDIA_VOICE
+        assertFalse(host.dispatchKeyEvent(key(code, true)))
+        field("activeAirPlaySession", mock(AirPlaySession::class.java))
+        assertFalse(host.dispatchKeyEvent(key(code, false)))
+        verify(controller, never()).requestSiri()
+    }
+
     @Test fun assigningALegacyVoiceKeyBetweenDownAndUpKeepsTheOriginalAction() {
         val code = KeyEvent.KEYCODE_VOICE_ASSIST
         WheelZoomSettings.setSiriKey(host, false)

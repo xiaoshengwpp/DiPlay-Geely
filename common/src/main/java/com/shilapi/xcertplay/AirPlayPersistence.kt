@@ -51,6 +51,7 @@ object AirPlayPersistence {
     private const val KEY_DISABLE_MEDIA_KEY_AUDIO_FOCUS = "disable_media_key_audio_focus"
     private const val KEY_MEDIA_AUDIO_CHANNEL = "media_audio_channel"
     private const val KEY_NAVIGATION_AUDIO_CHANNEL = "navigation_audio_channel"
+    private const val KEY_NAVIGATION_AUDIO_ATTENUATION = "navigation_audio_attenuation_db"
     private const val KEY_NAVIGATION_STREAM_TYPE = "navigation_stream_type"
     private const val KEY_WIRELESS_ENABLED = "wireless_enabled"
     private const val KEY_WIRELESS_HOTSPOT_MODE = "wireless_hotspot_mode"
@@ -287,6 +288,19 @@ object AirPlayPersistence {
         if (channel == null) editor.remove(KEY_NAVIGATION_AUDIO_CHANNEL)
         else editor.putInt(KEY_NAVIGATION_AUDIO_CHANNEL, channel)
         editor.apply()
+    }
+
+    fun loadNavigationAudioAttenuationDb(context: Context): Int =
+        com.shilapi.xcertplay.media.NavigationAudioGain.clamp(
+            context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getInt(KEY_NAVIGATION_AUDIO_ATTENUATION, 0),
+        )
+
+    fun saveNavigationAudioAttenuationDb(context: Context, db: Int) {
+        context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
+            .putInt(KEY_NAVIGATION_AUDIO_ATTENUATION,
+                com.shilapi.xcertplay.media.NavigationAudioGain.clamp(db))
+            .apply()
     }
 
     /** Applies a nonzero setup-guide default only when no current or legacy choice exists. */
