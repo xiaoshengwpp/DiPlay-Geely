@@ -34,7 +34,7 @@ class GeelyMusicBufferSettingsUiTest {
     }
 
     @Test fun compactFullAndRtlLargeTextCardsFitTheirWindow() {
-        for ((locale, width) in listOf("en" to 600, "en" to 1280, "ar" to 600)) {
+        for ((locale, width) in listOf("en" to 600, "en" to 1280, "ar" to 600, "ja" to 320, "ar" to 320)) {
             RuntimeEnvironment.setQualifiers("$locale-w${width}dp-h960dp-mdpi")
             val app = RuntimeEnvironment.getApplication()
             val previous = Configuration(app.resources.configuration)
@@ -43,6 +43,8 @@ class GeelyMusicBufferSettingsUiTest {
             activity.setTheme(android.R.style.Theme_Material_NoActionBar)
             val content = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
             try {
+                // Exercise the same normalization as the real Settings page.
+                ReflectionHelpers.setField(activity, "page", "settings")
                 ReflectionHelpers.setField(activity, "settingsSectionFilter", setOf(SettingsSection.AUDIO_ROUTING))
                 ReflectionHelpers.callInstanceMethod<Unit>(activity, "allSettingsSections",
                     ReflectionHelpers.ClassParameter.from(LinearLayout::class.java, content))

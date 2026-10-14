@@ -6028,9 +6028,10 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     }
 
     /** Shared minimum height and padding; long translated audio values can grow instead of clipping. */
-    private fun growingChoiceParams(button: Button, top: Int = 0) =
+    private fun growingChoiceParams(button: SettingButton, top: Int = 0) =
         matchButton(top, SETTINGS_CHOICE_MIN_HEIGHT_DP).apply {
             height = ViewGroup.LayoutParams.WRAP_CONTENT
+            button.growForText = true
             button.minHeight = dp(SETTINGS_CHOICE_MIN_HEIGHT_DP)
             button.setPaddingRelative(button.paddingStart, dp(SETTINGS_CHOICE_TEXT_INSET_DP),
                 button.paddingEnd, dp(SETTINGS_CHOICE_TEXT_INSET_DP))
@@ -6203,6 +6204,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         private val accent: Int,
     ) : Button(context) {
         var action = false
+        var growForText = false
         var contentOffsetY = 0f
         var alignVisibleGlyphs = true
         private val glyphBounds = android.graphics.Rect()
@@ -6287,7 +6289,10 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             val lp = child.layoutParams as? LinearLayout.LayoutParams ?: continue
             when {
                 child is Button -> {
-                    lp.height = dp(CONTROL_HEIGHT_DP); lp.topMargin = 0
+                    // Only explicitly growing choices keep their text-driven height.
+                    lp.height = if (child is SettingButton && child.growForText) ViewGroup.LayoutParams.WRAP_CONTENT
+                        else dp(CONTROL_HEIGHT_DP)
+                    lp.topMargin = 0
                     lp.bottomMargin = dp(if (isNote(next)) NOTE_ATTACH_GAP_DP else CONTROL_GAP_DP)
                 }
                 // Toggle rows carried their own vertical padding, which doubled the gap after a button.

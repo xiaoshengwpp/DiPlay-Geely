@@ -41,6 +41,16 @@ class SecondUpstreamSyncTest(unittest.TestCase):
         self.assertNotIn('wifi_direct_scan_pause', backup)
         self.assertNotIn('Policy.All', backup)
 
+    def test_only_explicitly_growing_choices_escape_fixed_height_normalization(self):
+        activity = (COMMON / 'DiPlayActivity.kt').read_text()
+        self.assertIn('var growForText = false', activity)
+        self.assertIn('button.growForText = true', activity)
+        self.assertIn('child is SettingButton && child.growForText', activity)
+        test = (ROOT / 'common/src/test/java/com/shilapi/xcertplay/GeelyMusicBufferSettingsUiTest.kt').read_text()
+        self.assertIn('ReflectionHelpers.setField(activity, "page", "settings")', test)
+        self.assertIn('"ja" to 320', test)
+        self.assertIn('"ar" to 320', test)
+
     def test_new_ui_screenshots_are_uploaded_by_existing_report_path(self):
         tests = (ROOT / 'common/src/test/java/com/shilapi/xcertplay/AdaptiveSettingsUiTest.kt').read_text()
         self.assertIn('build/reports/album-artwork-ui/navigation-audio/', tests)

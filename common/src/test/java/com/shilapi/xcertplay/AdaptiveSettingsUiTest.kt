@@ -13,6 +13,7 @@ import android.os.Looper
 import android.view.Surface
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Button
 import android.widget.EditText
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -781,6 +782,37 @@ class AdaptiveSettingsUiTest {
     @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
     @Test @Config(sdk = [29], qualifiers = "ar-ldrtl-w320dp-h600dp")
     fun navigationSliderScreenshotCompactArabicRtlLargeFont() = captureNavigationSlider("compact-ar-rtl", 1.3f)
+
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    @Test @Config(sdk = [29], qualifiers = "ja-w320dp-h600dp")
+    fun japaneseAudioChoicesGrowOnTheActualNarrowSettingsPage() = verifyGrowingAudioChoices()
+
+    @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    @Test @Config(sdk = [29], qualifiers = "ar-ldrtl-w320dp-h600dp")
+    fun arabicAudioChoicesGrowOnTheActualNarrowSettingsPage() = verifyGrowingAudioChoices()
+
+    private fun verifyGrowingAudioChoices() {
+        RuntimeEnvironment.setFontScale(1.3f)
+        val screen = openSettings()
+        ReflectionHelpers.setField(screen, "settingsCategory", SettingsCategory.AUDIO)
+        ReflectionHelpers.callInstanceMethod<Unit>(screen, "render")
+        layoutRoot(screen)
+        val labels = listOf(R.string.contrib_audio_home_media_channel_label,
+            R.string.contrib_audio_home_nav_channel_label, R.string.settings_music_buffer_wireless,
+            R.string.settings_music_buffer_wired)
+        for (label in labels) {
+            val choice = descendants(screen.window.decorView).filterIsInstance<Button>().single {
+                it.text.toString().startsWith(screen.getString(label))
+            }
+            assertEquals("Normalization must preserve deliberate text growth: ${choice.text}",
+                ViewGroup.LayoutParams.WRAP_CONTENT, choice.layoutParams.height)
+            val textLayout = requireNotNull(choice.layout)
+            assertTrue("The complete choice text must fit: ${choice.text}",
+                textLayout.getLineBottom(textLayout.lineCount - 1) <=
+                    choice.height - choice.compoundPaddingTop - choice.compoundPaddingBottom)
+            assertTrue((0 until textLayout.lineCount).all { textLayout.getEllipsisCount(it) == 0 })
+        }
+    }
 
     private fun captureNavigationSlider(name: String, fontScale: Float) {
         RuntimeEnvironment.setFontScale(fontScale)
