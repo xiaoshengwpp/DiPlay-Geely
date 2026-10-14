@@ -48,7 +48,7 @@ class SiriMediaSourceContractTest(unittest.TestCase):
     def test_all_media_routes_share_call_session_and_avrcp_guards(self):
         text = (COMMON / 'CarPlayMediaKeys.kt').read_text()
         send = text.split('    private fun send(', 1)[1].split('    internal fun onForegroundMediaKey', 1)[0]
-        for guard in ('active !== expectedController', '!stillCurrent()', 'active.activeAirPlaySessionToken() ?: return false',
+        for guard in ('active !== expectedController', '!stillCurrent()', 'active.activeAirPlaySessionToken() ?: return rejected("no-session")',
                       'inCall(context) || AirPlayPersistence.loadCarBluetoothAudio(context)', 'mediaDispatch.shouldSend('):
             self.assertLess(send.index(guard), send.index('active.sendMediaButton(index, token)'))
         for route in ('FOREGROUND', 'MEDIA_SESSION', 'MEDIA_CONTROLLER', 'GEELY_PRIVATE'):
