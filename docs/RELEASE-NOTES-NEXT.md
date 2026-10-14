@@ -1,3 +1,9 @@
+# DiPlay-Geely 0.2.20-geely.1 source candidate
+
+The reviewed 0.2.20 update adds USB/CH341 listing diagnostics and a consent-bound call-earpiece fallback. Default calls do not acquire a new route; the existing loudspeaker choice is sampled at call start. See [the current integration record](GEELY-UPSTREAM-0.2.20.md). This is not a signed release or vehicle acceptance.
+
+The earlier source-integration history below is retained for provenance.
+
 # DiPlay-Geely unreleased source changes
 
 Reviewed source integration from official DiPlay main through `0919997b8645b825e4370866d66d455678d2b9da` (2026-10-14), after the existing `c30d3f0` integration. This is source work, not an APK release or hardware acceptance result.
