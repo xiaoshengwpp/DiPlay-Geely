@@ -11,8 +11,15 @@ object BydBluetoothSuspend {
     private val worker by lazy { Unit }
     private var lease: BluetoothSuspendLease? = null
     private var pending: Any? = null
-    fun suspend(context: Context, owner: Any, delayMillis: Long = 10_000L, stillActive: () -> Boolean = { true }) = Unit
-    fun resume(context: Context, owner: Any) = Unit
+    /** Preserve upstream callback signatures without invoking them or initializing vendor work. */
+    fun suspend(
+        context: Context,
+        owner: Any,
+        delayMillis: Long = 10_000L,
+        log: (String) -> Unit = {},
+        stillActive: () -> Boolean = { true },
+    ) = Unit
+    fun resume(context: Context, owner: Any, log: (String) -> Unit = {}) = Unit
     fun onAppOpened(context: Context) = Unit
     // Normal CarPlay Bluetooth bootstrap independently verifies the adapter.
     fun resumeAndWait(context: Context, adapter: BluetoothAdapter?, timeoutMillis: Long = 5_000L): Boolean = true

@@ -1799,6 +1799,7 @@ private class AudioRenderer(
     }
 
     private fun run() {
+        runCatching { android.os.Process.setThreadPriority(android.os.Process.THREAD_PRIORITY_AUDIO) }
         try {
             runCatching { report("Audio: starting api=${Build.VERSION.SDK_INT} " +
                 "audioType=${format.audioType} codec=${format.codec} rate=${format.sampleRate} channels=${format.channels} " +

@@ -60,8 +60,10 @@ class BluetoothSuspendLifecycleTest {
         val lease = installRejectingLease()
         val owner = Any()
         repeat(3) {
-            BydBluetoothSuspend.suspend(rejectingContext, owner, 0) { error("owner callback invoked") }
-            BydBluetoothSuspend.resume(rejectingContext, owner)
+            BydBluetoothSuspend.suspend(rejectingContext, owner, 0,
+                log = { error("pause log callback invoked") },
+                stillActive = { error("owner callback invoked") })
+            BydBluetoothSuspend.resume(rejectingContext, owner) { error("resume log callback invoked") }
             BydBluetoothSuspend.onAppOpened(rejectingContext)
             assertFalse(BydBluetoothSuspend.isSuspendedByUs(rejectingContext))
         }

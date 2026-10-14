@@ -24,6 +24,9 @@ object CarHotspotTethering {
 
     fun permitted(context: Context): Boolean = false
 
+    /** Generic upstream tethering startup remains unavailable in this product. */
+    fun appStartSupported(): Boolean = false
+
     /** Automatic hotspot control is unavailable and never accesses context or invokes callbacks. */
     fun enable(
         context: Context,

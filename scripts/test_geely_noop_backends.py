@@ -127,6 +127,19 @@ class GeelyNoopBackendsTest(unittest.TestCase):
         self.assertEqual('false', service.get(a+'enabled'))
         self.assertEqual('false', service.get(a+'exported'))
 
+    def test_upstream_platform_tethering_cannot_activate_or_expand_hidden_api_access(self):
+        text = (S/'network/PlatformTetheringStart.kt').read_text()
+        self.assertIn('fun supported(sdk: Int = 0): Boolean = false', text)
+        start = text.split('fun start(', 1)[1].split('internal fun invoke(', 1)[0]
+        self.assertIn('throw UnsupportedOperationException(', start)
+        for forbidden in ('getSystemService(', 'Class.forName(', 'setHiddenApiExemptions',
+                          'VMRuntime', 'BydAdbShell', 'LocalAdb', 'getDeclaredField(',
+                          'ServiceManager', 'Runtime.getRuntime(', 'ProcessBuilder('):
+            self.assertNotIn(forbidden, text)
+        tethering = (S/'network/CarHotspotTethering.kt').read_text()
+        self.assertIn('fun appStartSupported(): Boolean = false', tethering)
+        self.assertNotIn('PlatformTetheringStart.start(', tethering)
+
     def test_pure_codecs_models_and_negative_test_suites_are_retained(self):
         for relative in ('hud/BydAmbientLightPolicy.kt', 'hud/BydStandalonePackets.kt', 'hud/BydHudRouteState.kt',
                          'hud/FceClusterOutput.kt', 'adb/AdbPacket.kt'):
