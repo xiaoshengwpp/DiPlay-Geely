@@ -308,6 +308,7 @@ internal object CarPlayMediaKeys {
             isActive = true
         }
         Log.i(TAG, "media keys active focusDisabled=$focusDisabled focusGranted=$granted")
+        WheelKeyLog.note("media keys active focusDisabled=$focusDisabled focusGranted=$granted")
     }
 
     private fun forwardGrantedFocusLocked() {
@@ -335,6 +336,7 @@ internal object CarPlayMediaKeys {
         }
         if (!current) return
         Log.i(TAG, "audio focus change=$change")
+        WheelKeyLog.note("media keys audio focus change=$change")
         // Resolve the matching sink and invoke it outside the media-key monitor. An abandoned
         // request must never mute a newer controller, and these owners must not nest locks.
         val background = CarPlayBackgroundSession.snapshot()
@@ -397,18 +399,24 @@ internal object CarPlayMediaKeys {
         expectedController: CarPlayController? = controller,
         stillCurrent: () -> Boolean = { true },
     ): Boolean {
-        val active = controller ?: return false
-        val context = appContext ?: return false
-        if (active !== expectedController || !stillCurrent()) return false
-        val token = active.activeAirPlaySessionToken() ?: return false
-        if (inCall(context) || AirPlayPersistence.loadCarBluetoothAudio(context)) return false
+        fun rejected(reason: String): Boolean {
+            WheelKeyLog.note("media key $source -> CarPlay $index sent=false reason=$reason")
+            return false
+        }
+        val active = controller ?: return rejected("no-controller")
+        val context = appContext ?: return rejected("no-context")
+        if (active !== expectedController || !stillCurrent()) return rejected("stale-owner")
+        val token = active.activeAirPlaySessionToken() ?: return rejected("no-session")
+        if (inCall(context) || AirPlayPersistence.loadCarBluetoothAudio(context)) return rejected("call-or-avrcp")
         if (!mediaDispatch.shouldSend(token, index, route, SystemClock.elapsedRealtime())) {
             Log.d(TAG, "media key duplicate source=$source index=$index")
+            WheelKeyLog.note("media key duplicate source=$source index=$index")
             return true
         }
         // A local video player keeps ownership before a CarPlay command can end its stream.
         val sent = if (CarPlayVideo.onMediaKey(index)) {
             Log.i(TAG, "media key $source -> car video player $index")
+            WheelKeyLog.note("media key $source -> car video player $index")
             true
         } else {
             active.sendMediaButton(index, token) {
@@ -418,6 +426,7 @@ internal object CarPlayMediaKeys {
                 }
             }.also {
                 Log.i(TAG, "media key $source -> CarPlay $index sent=$it")
+                WheelKeyLog.note("media key $source -> CarPlay $index sent=$it")
             }
         }
         if (sent) mediaDispatch.record(token, index, route, SystemClock.elapsedRealtime())

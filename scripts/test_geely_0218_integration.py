@@ -120,9 +120,9 @@ class Geely0218IntegrationTest(unittest.TestCase):
             self.assertIn(required, host)
         media = (COMMON / 'CarPlayMediaKeys.kt').read_text()
         for required in ('CarPlayMediaButton.forCarPlayWindow(event.keyCode, sessionActive, inCall)',
-                         'active.activeAirPlaySessionToken() ?: return false',
-                         'if (inCall(context) || AirPlayPersistence.loadCarBluetoothAudio(context)) return false',
-                         'if (active !== expectedController || !stillCurrent()) return false',
+                         'active.activeAirPlaySessionToken() ?: return rejected("no-session")',
+                         'if (inCall(context) || AirPlayPersistence.loadCarBluetoothAudio(context)) return rejected("call-or-avrcp")',
+                         'if (active !== expectedController || !stillCurrent()) return rejected("stale-owner")',
                          'mediaDispatch.shouldSend(token, index, route,',
                          'if (consumeContinuation(event)) return true',
                          'event.repeatCount != 0 || bluetoothAudio'):

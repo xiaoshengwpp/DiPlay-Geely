@@ -20,3 +20,10 @@ BYD ambient lighting, OEM Bluetooth suspension and automatic car-hotspot start r
 - Keep generic/session-owned voice-key dispatch and Geely input opt-ins. BYD short/long voice-key pair handling remains behind the disabled BYD gate.
 
 BYD ambient policy/text changes are retained behind the inactive OEM gate. Automatic hotspot permission/retry and Wi-Fi scan-pause controls remain unavailable in this product; no ADB, hidden-API exemption or system-permission operation is activated. See [the second integration record](GEELY-UPSTREAM-20261014-SECOND.md) for scope and validation.
+
+
+## Third reviewed upstream source changes, 2026-10-14
+
+Official main through `f0f1eadca5cb114b8fd469eb6b89f38a0615392f` adds bounded music clock-drift correction, media-key/audio-focus diagnostics and a manual-connect escape from incorrect car-hotspot status reports. Music playback rate may adjust by up to ±1.5%; calls and navigation retain their rates. A driver can choose Connect when Android incorrectly reports the manually enabled car hotspot as off; that choice suppresses repeated off reminders until Android reports it on once. This does not enable the hotspot, grant permissions or change the car-settings button.
+
+The BYD long-press Siri setting remains hidden and inactive in this Geely build, including stale settings and detected BYD packages. Geely input opt-ins, session/call/AVRCP fences, microphone selection, language choices, and previous navigation-gain/layout fixes remain. Version and owner-release files are unchanged. Source-only validation and physical-vehicle limits are in [the third integration record](GEELY-UPSTREAM-20261014-THIRD.md).
