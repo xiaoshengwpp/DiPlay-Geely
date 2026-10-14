@@ -787,17 +787,71 @@ class AdaptiveSettingsUiTest {
         val screen = openSettings()
         ReflectionHelpers.setField(screen, "settingsCategory", SettingsCategory.AUDIO)
         ReflectionHelpers.callInstanceMethod<Unit>(screen, "render")
-        layoutRoot(screen)
-        val slider = descendants(screen.window.decorView).filterIsInstance<SeekBar>().single()
-        slider.requestRectangleOnScreen(Rect(0, 0, slider.width, slider.height), true)
-        layoutRoot(screen)
-        val rectangle = Rect()
-        assertTrue("Navigation volume slider should be visible", slider.getGlobalVisibleRect(rectangle))
-        assertTrue(rectangle.height() >= slider.height / 2)
-        val root = screen.findViewById<ViewGroup>(android.R.id.content).getChildAt(0)
-        val bitmap = Bitmap.createBitmap(root.width, root.height, Bitmap.Config.ARGB_8888)
+        // Capture through the content parent: on a compact screen the child is itself a ScrollView.
+        // Calling that child.draw() directly skips the scroll transform normally applied by its parent.
+        val capture = screen.findViewById<ViewGroup>(android.R.id.content)
+        val metrics = screen.resources.displayMetrics
+        shadowOf(Looper.getMainLooper()).idle()
+        capture.measure(
+            View.MeasureSpec.makeMeasureSpec(metrics.widthPixels, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(metrics.heightPixels, View.MeasureSpec.EXACTLY),
+        )
+        capture.layout(0, 0, metrics.widthPixels, metrics.heightPixels)
+        shadowOf(Looper.getMainLooper()).idle()
+        val scroll = ReflectionHelpers.getField<ScrollView>(screen, "rootScroll")
+        val scrollContent = scroll.getChildAt(0) as ViewGroup
+        val slider = descendants(capture).filterIsInstance<SeekBar>().single()
+        val gainRow = slider.parent as ViewGroup
+        val title = descendants(gainRow).filterIsInstance<TextView>().single {
+            it.text.toString() == screen.getString(R.string.settings_navigation_attenuation)
+        }
+        val value = descendants(gainRow).filterIsInstance<TextView>().single {
+            it.text.toString() == screen.getString(R.string.settings_navigation_attenuation_value, 0)
+        }
+        val description = descendants(capture).filterIsInstance<TextView>().single {
+            it.text.toString() == screen.getString(R.string.settings_navigation_attenuation_description)
+        }
+        fun bounds(ancestor: ViewGroup, view: View): Rect {
+            val origin = IntArray(2)
+            val location = IntArray(2)
+            ancestor.getLocationInWindow(origin)
+            view.getLocationInWindow(location)
+            val left = location[0] - origin[0]
+            val top = location[1] - origin[1]
+            return Rect(left, top, left + view.width, top + view.height)
+        }
+        val block = bounds(scrollContent, gainRow).apply { union(bounds(scrollContent, description)) }
+        val viewportHeight = scroll.height - scroll.paddingTop - scroll.paddingBottom
+        assertTrue("The complete navigation control should fit the viewport", block.height() <= viewportHeight)
+        scroll.scrollTo(0, (block.top - scroll.paddingTop).coerceAtLeast(0))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertSame("The captured page must remain the measured page", scroll,
+            ReflectionHelpers.getField<ScrollView>(screen, "rootScroll"))
+        // Explicit screenshot/scroll-viewport containment, rather than getGlobalVisibleRect(), which
+        // can pass even when a ScrollView is drawn without its parent's canvas transform.
+        val viewport = bounds(capture, scroll).apply {
+            left += scroll.paddingLeft
+            top += scroll.paddingTop
+            right -= scroll.paddingRight
+            bottom -= scroll.paddingBottom
+        }
+        assertTrue(viewport.intersect(Rect(0, 0, capture.width, capture.height)))
+        for (view in listOf(title, value, slider, description)) {
+            val rectangle = bounds(capture, view)
+            assertTrue("Navigation control has no measured area: $rectangle", rectangle.width() > 0 && rectangle.height() > 0)
+            assertTrue("Navigation control $rectangle must fit screenshot viewport $viewport", viewport.contains(rectangle))
+        }
+        for (view in listOf(title, value, description)) {
+            val textLayout = requireNotNull(view.layout)
+            assertTrue("Navigation text must not clip: ${view.text}",
+                textLayout.getLineBottom(textLayout.lineCount - 1) <=
+                    view.height - view.compoundPaddingTop - view.compoundPaddingBottom)
+            assertTrue((0 until textLayout.lineCount).all { textLayout.getEllipsisCount(it) == 0 })
+        }
+        assertEquals(0, capture.scrollY)
+        val bitmap = Bitmap.createBitmap(capture.width, capture.height, Bitmap.Config.ARGB_8888)
         try {
-            root.draw(Canvas(bitmap))
+            capture.draw(Canvas(bitmap))
             val output = Paths.get("build/reports/album-artwork-ui/navigation-audio/$name.png")
             Files.createDirectories(output.parent)
             Files.newOutputStream(output).use { stream ->

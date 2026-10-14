@@ -44,6 +44,9 @@ class SecondUpstreamSyncTest(unittest.TestCase):
     def test_new_ui_screenshots_are_uploaded_by_existing_report_path(self):
         tests = (ROOT / 'common/src/test/java/com/shilapi/xcertplay/AdaptiveSettingsUiTest.kt').read_text()
         self.assertIn('build/reports/album-artwork-ui/navigation-audio/', tests)
+        self.assertIn('capture.draw(Canvas(bitmap))', tests)
+        self.assertIn('viewport.contains(rectangle)', tests)
+        self.assertIn('listOf(title, value, slider, description)', tests)
         for variant in ('compact-ja', 'expanded-en', 'compact-ar-rtl'):
             self.assertIn('"' + variant + '"', tests)
 
