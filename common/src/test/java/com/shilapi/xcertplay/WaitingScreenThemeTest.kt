@@ -19,7 +19,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 
-/** Waiting UI uses the retained system day/night state, including reconnects with no video. */
+/** AUTO app appearance follows retained system day/night state, including reconnects with no video. */
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29])
 class WaitingScreenThemeTest {
@@ -27,12 +27,16 @@ class WaitingScreenThemeTest {
 
     @Before fun setUp() {
         activity = Robolectric.buildActivity(CarPlayHostActivity::class.java).get()
+        activity.getSharedPreferences("xcertplay_airplay", 0).edit().clear().commit()
+        AirPlayPersistence.saveAppAppearance(activity, AppAppearance.AUTO)
     }
 
     @After fun tearDown() {
         (field("mainHandler") as Handler).removeCallbacksAndMessages(null)
         (field("teardownExecutor") as ExecutorService).shutdownNow()
         (field("airPlayCommandExecutor") as ExecutorService).shutdownNow()
+        activity.getSharedPreferences("xcertplay_airplay", 0).edit().clear().commit()
+        AppAppearanceRuntime.resetForTest()
     }
 
     @Test fun startupAtNightPaintsDarkBeforeShowingTheWaitingPanel() {
@@ -80,6 +84,7 @@ class WaitingScreenThemeTest {
     private fun build(night: Boolean) {
         // The fixture bypasses private accessory bootstrap; mirror onCreate's state snapshot.
         setField("darkMode", night)
+        setField("appNight", activity.resolveAppNightNow(night))
         setField("lastConfiguration", Configuration().apply {
             uiMode = if (night) Configuration.UI_MODE_NIGHT_YES else Configuration.UI_MODE_NIGHT_NO
         })

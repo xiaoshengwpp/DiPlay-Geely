@@ -3382,7 +3382,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 onApply = { value -> applyMediaChannel(value, current, control, summary) },
             )
         }
-        parent.addView(control, matchButton(12, 60))
+        parent.addView(control, growingChoiceParams(control, CONTROL_GAP_DP))
     }
 
     private fun navigationChannelControl(parent: LinearLayout) {
@@ -3398,7 +3398,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 applyNavigationChannel(value, current, control, summary)
             }
         }
-        parent.addView(control, matchButton(10, 60))
+        parent.addView(control, growingChoiceParams(control, CONTROL_GAP_DP))
         parent.addView(label(getString(R.string.contrib_audio_home_nav_channel_note), 14, MUTED).apply {
             setPadding(0, dp(8), 0, dp(18))
         })
@@ -5985,15 +5985,20 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                     }
                 }.setNegativeButton(getString(R.string.cancel), null).show()
         }
-        val params = matchButton(0, SETTINGS_CHOICE_MIN_HEIGHT_DP)
-        if (growForText) {
-            params.height = ViewGroup.LayoutParams.WRAP_CONTENT
+        val params = if (growForText) growingChoiceParams(button)
+            else matchButton(0, SETTINGS_CHOICE_MIN_HEIGHT_DP)
+        parent.addView(button, params); parent.addView(space(CONTROL_GAP_DP))
+    }
+
+    /** Shared minimum height and padding; long translated audio values can grow instead of clipping. */
+    private fun growingChoiceParams(button: Button, top: Int = 0) =
+        matchButton(top, SETTINGS_CHOICE_MIN_HEIGHT_DP).apply {
+            height = ViewGroup.LayoutParams.WRAP_CONTENT
             button.minHeight = dp(SETTINGS_CHOICE_MIN_HEIGHT_DP)
             button.setPaddingRelative(button.paddingStart, dp(SETTINGS_CHOICE_TEXT_INSET_DP),
                 button.paddingEnd, dp(SETTINGS_CHOICE_TEXT_INSET_DP))
         }
-        parent.addView(button, params); parent.addView(space(12))
-    }
+
     private fun card() = column().apply { background = rounded(SURFACE, BORDER); setPadding(dp(24), dp(24), dp(24), dp(24)) }
     private fun column() = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; layoutParams = LinearLayout.LayoutParams(-1, -2) }
     private fun row() = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; layoutParams = LinearLayout.LayoutParams(-1, -2) }

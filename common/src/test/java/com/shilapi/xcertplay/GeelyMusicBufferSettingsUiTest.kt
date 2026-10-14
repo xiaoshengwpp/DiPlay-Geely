@@ -4,6 +4,7 @@ import android.app.AlertDialog
 import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Canvas
+import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
@@ -17,6 +18,7 @@ import org.junit.runner.RunWith
 import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows.shadowOf
 import org.robolectric.shadows.ShadowAlertDialog
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
@@ -91,6 +93,7 @@ class GeelyMusicBufferSettingsUiTest {
             var dialog = ShadowAlertDialog.getLatestAlertDialog()
             dialog.listView.performItemClick(null, 0, 0)
             dialog.getButton(AlertDialog.BUTTON_NEGATIVE).performClick()
+            shadowOf(Looper.getMainLooper()).idle()
             assertEquals(300, AirPlayPersistence.loadMediaBufferMillis(activity, wireless = false))
             assertEquals(300, AirPlayPersistence.loadMediaBufferMillis(activity, wireless = true))
             wired.performClick()
@@ -98,6 +101,7 @@ class GeelyMusicBufferSettingsUiTest {
             assertEquals(activity.getString(R.string.save), dialog.getButton(AlertDialog.BUTTON_POSITIVE).text)
             dialog.listView.performItemClick(null, 0, 0)
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
+            shadowOf(Looper.getMainLooper()).idle()
             assertEquals(50, AirPlayPersistence.loadMediaBufferMillis(activity, wireless = false))
             assertEquals(300, AirPlayPersistence.loadMediaBufferMillis(activity, wireless = true))
             assertFalse(CarPlayBackgroundSession.hasSession())
