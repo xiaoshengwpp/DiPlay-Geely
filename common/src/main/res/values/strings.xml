@@ -708,6 +708,10 @@
     <string name="wheel_key_in_use">That key is already the %1$s key. Choose another key.</string>
     <string name="wheel_siri_key">Siri key on the wheel</string>
     <string name="wheel_siri_key_description">Opens Siri with a wheel key you choose while CarPlay is on the screen. A key that the car keeps for itself works only with the wheel key service, which also works when CarPlay is in the background. Without CarPlay, or during a call, the key keeps the car\'s own action.</string>
+    <string name="wheel_siri_double_press">Double press for Siri</string>
+    <string name="wheel_siri_double_press_description">A single press keeps the car\'s action. Press twice within the selected interval; DiPlay opens Siri after the selected delay. The wheel key service is required if the car\'s assistant takes over the screen. Applies immediately.</string>
+    <string name="wheel_siri_double_press_interval">Double-press interval</string>
+    <string name="wheel_siri_trigger_delay">Siri trigger delay</string>
     <string name="wheel_siri_long_press_only">Siri on long press only</string>
     <string name="wheel_siri_long_press_only_description">Only a long press of the wheel\'s voice button opens Siri. A short press does nothing in DiPlay.</string>
     <string name="wheel_key_role_back">back</string>
@@ -968,4 +972,22 @@
     <string name="settings_write_settings_allow">Allow access</string>
     <string name="settings_wifi_direct_scan_pause">Pause the car\'s Wi-Fi search during CarPlay · needs ADB</string>
     <string name="settings_wifi_direct_scan_pause_description">Over Wi-Fi Direct the car searches for Wi-Fi networks every few seconds, and each search makes music and video stutter. With this on, DiPlay pauses the search while CarPlay runs. The car then also does not join a known network, such as your phone\'s hotspot, by itself until CarPlay ends; you can still join one in the car\'s Wi-Fi settings. Turn it off to let the car join automatically. Applies at the next connection.</string>
+    <string name="temporary_system_bars">Temporary system bars (5 seconds)</string>
+    <string name="temporary_system_bars_description">Optional: swipe up with the configured settings gesture fingers to show hidden car status/navigation bars for five seconds; swipe down still opens DiPlay settings. Disable on head units with conflicting gestures. Some firmware may ignore the request.</string>
+    <string name="wheel_media_play_pause">Play/pause key on the wheel</string>
+    <string name="wheel_media_play_pause_description">Assign any available steering-wheel or keyboard key to toggle CarPlay music playback. Works while CarPlay runs, including in the background if the wheel-key service is enabled. During calls or when disconnected, the vehicle keeps the key. A key reserved by firmware may not reach DiPlay.</string>
+    <string name="wheel_key_role_media_play_pause">Play/pause</string>
+    <string name="wheel_media_navigation_reserved">TV remote navigation, Home, volume, voice-assistant and media buttons keep their original functions. Choose a spare key.</string>
+    <string name="black_corner_overlay">Black rounded corners</string>
+    <string name="black_corner_overlay_description">Cover CarPlay picture corners in black. Choose Off, a manual radius, or the iPhone mask (experimental). The iPhone mode needs a new connection and falls back to 24 dp if no valid mask arrives. Manual changes preview immediately; Save preserves the selection.</string>
+    <string name="black_corner_overlay_off">Off</string>
+    <string name="black_corner_overlay_value">%1$d dp</string>
+    <string name="iphone_corner_mask_mode">iPhone mask (experimental)</string>
+
+    <!-- Generic Android window keys: foreground-only, independent of OEM services. -->
+    <string name="settings_wheel_foreground_only">Foreground only: these assignments work only while CarPlay is visible and its window has focus. Keys intercepted by the car may never reach DiPlay.</string>
+    <string name="settings_wheel_siri_foreground_description">Choose an available Android key. One press keeps the original action; two presses open Siri after the selected delay while CarPlay stays in the foreground. During calls or when disconnected, the key keeps its original action. Applies immediately.</string>
+    <string name="settings_wheel_media_foreground_description">Choose an available Android key to play or pause CarPlay audio in the foreground. Navigation and system keys are reserved. During calls or when disconnected, the key keeps its original action. Applies immediately.</string>
+    <string name="settings_wheel_foreground_unavailable">Turn on this key first, keep this settings screen in the foreground, and try again outside a call.</string>
+    <string name="settings_wheel_reserved_key">This key is reserved. Choose a spare key.</string>
 </resources>

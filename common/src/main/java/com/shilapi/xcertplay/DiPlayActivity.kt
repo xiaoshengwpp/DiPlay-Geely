@@ -11,6 +11,7 @@ import android.app.TimePickerDialog
 import android.view.Window
 import android.bluetooth.BluetoothAdapter
 import android.bluetooth.BluetoothManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -585,6 +586,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) applyFullscreenMode()
+        else if (windowLearning?.foregroundOnly == true) cancelKeyLearning()
         // Some head units put their own density back without any other callback.
         if (hasFocus && enforceInterfaceSize()) render()
     }
@@ -1917,7 +1919,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             scheduleTimeControl(scheduleControls, start = false)
             card.addView(scheduleControls)
             card.addView(button(getString(R.string.picture_adjustments), false) {
-                startActivity(Intent(this, CarPlayHostActivity::class.java)
+                OwnScreenStart.start(this, Intent(this, CarPlayHostActivity::class.java)
                     .putExtra("picture_controls", true).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
             }, matchButton(0, 56).apply { bottomMargin = dp(24) })
             carPlaySizeControl(card)
@@ -2454,7 +2456,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             getString(R.string.permissions_and_connection_help), R.drawable.ic_dp_permissions) { card ->
             card.addView(label(getString(R.string.nearby_devices_connects_your_iphone_microphone_enables_sir), 16, MUTED))
             card.addView(button(getString(R.string.app_permissions), false) { openSystem(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))) }, matchButton(16, 60))
-            card.addView(button(getString(R.string.bluetooth_settings), false) { openSystem(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) }, matchButton(10, 60))
+            card.addView(button(getString(R.string.bluetooth_settings), false) { openBluetoothSettings() }, matchButton(10, 60))
             card.addView(button(getString(R.string.wireless_connection_help), false) { wirelessHelp() }, matchButton(10, 60))
         }
         languageSettings(content)
@@ -3036,23 +3038,85 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         }, "diplay-boot-repair").start()
     }
 
+    /**
+     * True only when the product permits BYD integration and the firmware was audited.
+     * A matching package or Android version must never activate OEM paths in the Geely build.
+     *
+     * DiLink 1.0 ships Android 7.1, which is also DiPlay's minimum, so this is the whole of the range
+     * anyone has checked. Every BYD path below is behind this so that no other head unit changes
+     * behaviour — a stock Android build of any version has no such package to find, and a newer BYD
+     * build stays exactly as it is today until it can be measured on a car.
+     */
+    private val targetedByBydSettingsWork get() =
+        GeelyVendorPolicy.bydAdb && Build.VERSION.SDK_INT <= Build.VERSION_CODES.N_MR1
+
+    /**
+     * True when [action] is answered by BYD's decoy rather than a real settings screen.
+     *
+     * The decoy accepts sixty standard android.settings actions and answers each with "the multimedia
+     * system does not support this operation". Because startActivity succeeds when it reaches the
+     * decoy, the intent has to be resolved first: a throw is not the only way for a screen to fail to
+     * appear.
+     */
+    private fun answeredByBydDecoy(action: String): Boolean {
+        if (!targetedByBydSettingsWork) return false
+        val resolved = runCatching { packageManager.resolveActivity(Intent(action), 0) }.getOrNull()
+        val info = resolved?.activityInfo ?: return false
+        // The decoy is the only occupant of the package's "unsupport" package; BYD's real screens live
+        // beside it, so the package name alone would not identify one.
+        return info.packageName == BYD_SETTINGS_PACKAGE && info.name.contains("unsupport", ignoreCase = true)
+    }
+
+    /** Opens a BYD screen by explicit component, which intent-filter matching cannot redirect. */
+    private fun openBydScreen(component: ComponentName): Boolean {
+        if (!targetedByBydSettingsWork) return false
+        return runCatching { startActivity(Intent().setComponent(component)) }.isSuccess
+    }
+
+    /**
+     * Opens the head unit's Bluetooth screen.
+     *
+     * Where BYD's decoy answers android.settings.BLUETOOTH_SETTINGS, BYD's own Bluetooth manager is
+     * opened instead. Every other head unit keeps the standard action, unchanged.
+     */
+    private fun openBluetoothSettings() {
+        if (!answeredByBydDecoy(Settings.ACTION_BLUETOOTH_SETTINGS)) {
+            openSystem(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
+            return
+        }
+        if (openBydScreen(BYD_BLUETOOTH_MANAGER)) return
+        Log.w(BYD_SETTINGS_TAG, "no Bluetooth screen on this head unit")
+        toast(getString(R.string.open_this_setting_from_your_car_s_settings_app))
+    }
+
     private fun openCarWifiSettings() {
-        val hotspot = Intent("com.android.settings.WIFI_TETHER_SETTINGS")
-        val target = packageManager.resolveActivity(hotspot, 0)?.activityInfo?.packageName
-        if (target == null) {
+        val tether = "com.android.settings.WIFI_TETHER_SETTINGS"
+        val target = packageManager.resolveActivity(Intent(tether), 0)?.activityInfo?.packageName
+        // Nothing opens the AOSP hotspot screen here: either no app answers the action at all, or BYD's
+        // decoy does. BYD's own screen answers android.intent.action.HOTSPOT_SETTINGS instead.
+        if (target == null || answeredByBydDecoy(tether)) {
+            if (targetedByBydSettingsWork && openBydScreen(BYD_HOTSPOT)) return
+            // Where the decoy answers the Wi-Fi settings fallback as well, taking it would only repeat
+            // the "not supported" dialog that brought the driver here. Say where the screen actually is.
+            if (answeredByBydDecoy(Settings.ACTION_WIRELESS_SETTINGS)) {
+                Log.w(BYD_SETTINGS_TAG, "no hotspot screen on this head unit")
+                toast(getString(R.string.open_this_setting_from_your_car_s_settings_app))
+                return
+            }
             openSystem(Intent(Settings.ACTION_WIRELESS_SETTINGS))
             return
         }
-        if (target == "com.byd.carsettings") {
+        if (GeelyVendorPolicy.bydAdb && target == "com.byd.carsettings") {
             runCatching { startActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)) }
         }
-        if (runCatching { startActivity(hotspot) }.isSuccess) return
+        if (runCatching { startActivity(Intent(tether)) }.isSuccess) return
         openSystem(Intent(Settings.ACTION_WIRELESS_SETTINGS))
     }
 
     private fun openCarClientWifiSettings() {
         val wifi = Intent(Settings.ACTION_WIFI_SETTINGS)
-        if (packageManager.resolveActivity(wifi, 0)?.activityInfo?.packageName == "com.byd.carsettings") {
+        if (GeelyVendorPolicy.bydAdb &&
+            packageManager.resolveActivity(wifi, 0)?.activityInfo?.packageName == "com.byd.carsettings") {
             runCatching { startActivity(Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)) }
         }
         openSystem(wifi)
@@ -3894,14 +3958,29 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     /** Steering-wheel keys for the dashboard map zoom and the CarPlay joystick: the switches, the key service and the keys. */
     // One place for the key service setup, above every feature that needs it.
     private fun wheelKeysSettings(card: LinearLayout) {
-        if (!GeelyVendorPolicy.bydAdb) return
+        if (!GeelyVendorPolicy.bydAdb) {
+            foregroundWheelControls(card)
+            return
+        }
         // The joystick and map zoom use BYD's media and custom keys.
         val byd = CarHotspotSetup.isBydHeadUnit(this)
         val zoomAvailable = wheelMapZoomAvailable()
         val vehicleKeysOn = WheelZoomSettings.joystick(this) ||
             (zoomAvailable && WheelZoomSettings.enabled(this))
-        if (WheelZoomSettings.siriKey(this) || vehicleKeysOn) wheelKeyServiceControls(card)
+        if (WheelZoomSettings.siriKey(this) || WheelZoomSettings.mediaPlayPause(this) || vehicleKeysOn) {
+            wheelKeyServiceControls(card)
+        }
         siriKeyControls(card)
+        toggle(card, getString(R.string.wheel_media_play_pause),
+            getString(R.string.wheel_media_play_pause_description),
+            WheelZoomSettings.mediaPlayPause(this)) {
+            WheelZoomSettings.setMediaPlayPause(this, it)
+            render()
+        }
+        if (WheelZoomSettings.mediaPlayPause(this)) {
+            wheelKeyAssignButton(card, WheelZoomSettings.Role.MEDIA_PLAY_PAUSE,
+                getString(R.string.wheel_key_role_media_play_pause))
+        }
         // BYD-only preference stays behind the product gate, even if a stale choice was saved.
         if (GeelyVendorPolicy.bydAdb && (byd || WheelZoomSettings.siriLongPressOnly(this))) {
             toggle(card, getString(R.string.wheel_siri_long_press_only), getString(R.string.wheel_siri_long_press_only_description),
@@ -3912,6 +3991,62 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             AirPlayPersistence.loadExternalController(this)) { AirPlayPersistence.saveExternalController(this, it) }
         // Keep previously configured controls reachable even if package detection misses the car.
         if (byd || zoomAvailable || WheelZoomSettings.joystick(this)) wheelKeyControls(card)
+    }
+
+    /** Generic assignments use fresh opt-ins and Android events delivered to the foreground window. */
+    private fun foregroundWheelControls(card: LinearLayout) {
+        if (!ForegroundWheelSettings.available()) return
+        card.addView(label(getString(R.string.settings_wheel_foreground_only), 14, MUTED))
+        toggle(card, getString(R.string.wheel_siri_double_press),
+            getString(R.string.settings_wheel_siri_foreground_description),
+            ForegroundWheelSettings.siriDoublePress(this)) {
+            ForegroundWheelSettings.setSiriDoublePress(this, it)
+            render()
+        }
+        if (ForegroundWheelSettings.siriDoublePress(this)) {
+            val intervals = WheelZoomSettings.SIRI_DOUBLE_PRESS_INTERVALS
+            choice(card, getString(R.string.wheel_siri_double_press_interval),
+                intervals.map { getString(R.string.fps_counter_millis, it) },
+                intervals.indexOf(ForegroundWheelSettings.siriDoublePressIntervalMillis(this)), reconnects = false, growForText = true) {
+                ForegroundWheelSettings.setSiriDoublePressIntervalMillis(this, intervals[it])
+            }
+            val delays = WheelZoomSettings.SIRI_TRIGGER_DELAYS
+            choice(card, getString(R.string.wheel_siri_trigger_delay),
+                delays.map { getString(R.string.fps_counter_millis, it) },
+                delays.indexOf(ForegroundWheelSettings.siriTriggerDelayMillis(this)), reconnects = false, growForText = true) {
+                ForegroundWheelSettings.setSiriTriggerDelayMillis(this, delays[it])
+            }
+            foregroundKeyAssignButton(card, WheelZoomSettings.Role.SIRI, getString(R.string.wheel_key_role_siri))
+        }
+        toggle(card, getString(R.string.wheel_media_play_pause),
+            getString(R.string.settings_wheel_media_foreground_description),
+            ForegroundWheelSettings.mediaPlayPause(this)) {
+            ForegroundWheelSettings.setMediaPlayPause(this, it)
+            render()
+        }
+        if (ForegroundWheelSettings.mediaPlayPause(this)) {
+            foregroundKeyAssignButton(card, WheelZoomSettings.Role.MEDIA_PLAY_PAUSE,
+                getString(R.string.wheel_key_role_media_play_pause))
+        }
+    }
+
+    private fun foregroundKeyAssignButton(card: LinearLayout, role: WheelZoomSettings.Role, name: String) {
+        fun current(key: WheelKey? = ForegroundWheelSettings.key(this, role)) =
+            getString(R.string.wheel_key_assign, name, key?.toString() ?: getString(R.string.wheel_key_none))
+        lateinit var assign: android.widget.Button
+        assign = button(current(), false) {
+            val started = learnForegroundKeyInWindow(role,
+                cancelled = { runOnUiThread { assign.text = current(); applyPendingAppearanceRender() } },
+                refused = { taken -> runOnUiThread {
+                    assign.text = current()
+                    toast(getString(R.string.wheel_key_in_use, getString(wheelKeyRoleName(taken))))
+                    applyPendingAppearanceRender()
+                } },
+                done = { key -> runOnUiThread { assign.text = current(key); applyPendingAppearanceRender() } })
+            if (started) assign.text = getString(R.string.wheel_key_press, name)
+            else toast(getString(R.string.settings_wheel_foreground_unavailable))
+        }.apply { growForText = true }
+        card.addView(assign, matchButton(10, 56))
     }
 
     // Map zoom only works where the dashboard map card used to show these controls.
@@ -3966,6 +4101,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 WheelZoomSettings.Role.JOYSTICK -> R.string.wheel_key_role_joystick
                 WheelZoomSettings.Role.SELECT -> R.string.wheel_key_role_select
                 WheelZoomSettings.Role.SIRI -> null
+                WheelZoomSettings.Role.MEDIA_PLAY_PAUSE -> null
             }.takeIf { joystick }
             val names = listOfNotNull(zoomName, joystickName)
             if (names.isEmpty()) continue
@@ -3981,6 +4117,26 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             render()
         }
         if (!WheelZoomSettings.siriKey(this)) return
+        toggle(card, getString(R.string.wheel_siri_double_press),
+            getString(R.string.wheel_siri_double_press_description),
+            WheelZoomSettings.siriDoublePress(this)) {
+            WheelZoomSettings.setSiriDoublePress(this, it)
+            render()
+        }
+        if (WheelZoomSettings.siriDoublePress(this)) {
+            val intervals = WheelZoomSettings.SIRI_DOUBLE_PRESS_INTERVALS
+            choice(card, getString(R.string.wheel_siri_double_press_interval),
+                intervals.map { getString(R.string.fps_counter_millis, it) },
+                intervals.indexOf(WheelZoomSettings.siriDoublePressIntervalMillis(this)), reconnects = false) {
+                WheelZoomSettings.setSiriDoublePressIntervalMillis(this, intervals[it])
+            }
+            val delays = WheelZoomSettings.SIRI_TRIGGER_DELAYS
+            choice(card, getString(R.string.wheel_siri_trigger_delay),
+                delays.map { getString(R.string.fps_counter_millis, it) },
+                delays.indexOf(WheelZoomSettings.siriTriggerDelayMillis(this)), reconnects = false) {
+                WheelZoomSettings.setSiriTriggerDelayMillis(this, delays[it])
+            }
+        }
         wheelKeyAssignButton(card, WheelZoomSettings.Role.SIRI, getString(R.string.wheel_key_role_siri))
     }
 
@@ -4030,8 +4186,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 assign.text = current(key)
                 applyPendingAppearanceRender()
             } } ||
-                // Without the service the Siri key is learnt from this window, so only keys that reach apps.
-                (role == WheelZoomSettings.Role.SIRI && learnInWindow(role, cancelled, refused) {
+                // Without the service, keys that reach this window can still be learnt.
+                ((role == WheelZoomSettings.Role.SIRI ||
+                    role == WheelZoomSettings.Role.MEDIA_PLAY_PAUSE) && learnInWindow(role, cancelled, refused) {
                     assign.text = current(it)
                     applyPendingAppearanceRender()
                 })
@@ -4050,6 +4207,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         WheelZoomSettings.Role.NEXT -> R.string.wheel_key_role_next
         WheelZoomSettings.Role.SELECT -> R.string.wheel_key_role_select
         WheelZoomSettings.Role.SIRI -> R.string.wheel_key_role_siri
+        WheelZoomSettings.Role.MEDIA_PLAY_PAUSE -> R.string.wheel_key_role_media_play_pause
     }
 
     private class WindowKeyLearning(
@@ -4057,10 +4215,28 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         val cancelled: () -> Unit,
         val refused: (WheelZoomSettings.Role) -> Unit,
         val done: (WheelKey) -> Unit,
-    )
+    ) {
+        var foregroundOnly: Boolean = false
+    }
+
+    private fun learnForegroundKeyInWindow(role: WheelZoomSettings.Role, cancelled: () -> Unit,
+        refused: (WheelZoomSettings.Role) -> Unit, done: (WheelKey) -> Unit): Boolean {
+        if (!ForegroundWheelSettings.available() || !hasWindowFocus() || inCall(this)) return false
+        val enabled = when (role) {
+            WheelZoomSettings.Role.SIRI -> ForegroundWheelSettings.siriDoublePress(this)
+            WheelZoomSettings.Role.MEDIA_PLAY_PAUSE -> ForegroundWheelSettings.mediaPlayPause(this)
+            else -> false
+        }
+        if (!enabled) return false
+        cancelKeyLearning()
+        windowLearning = WindowKeyLearning(role, cancelled, refused, done).apply { foregroundOnly = true }
+        handler.postDelayed(endWindowLearning, WheelKeyService.LEARNING_TIMEOUT_MILLIS)
+        return true
+    }
 
     private fun learnInWindow(role: WheelZoomSettings.Role, cancelled: () -> Unit,
         refused: (WheelZoomSettings.Role) -> Unit, done: (WheelKey) -> Unit): Boolean {
+        if (!GeelyVendorPolicy.bydAdb) return false
         cancelKeyLearning()
         windowLearning = WindowKeyLearning(role, cancelled, refused, done)
         handler.postDelayed(endWindowLearning, WheelKeyService.LEARNING_TIMEOUT_MILLIS)
@@ -4068,7 +4244,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     }
 
     private fun cancelKeyLearning() {
-        WheelKeyService.cancelLearning()
+        if (GeelyVendorPolicy.bydAdb) WheelKeyService.cancelLearning()
         handler.removeCallbacks(endWindowLearning)
         val cancelled = windowLearning?.cancelled
         windowLearning = null
@@ -4077,6 +4253,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (!GeelyVendorPolicy.bydAdb && !ForegroundWheelSettings.available()) return super.dispatchKeyEvent(event)
         if (event.action != KeyEvent.ACTION_DOWN && event.action != KeyEvent.ACTION_UP) return super.dispatchKeyEvent(event)
         val action = windowLearningPresses.filter(
             Triple(event.deviceId, event.keyCode, event.scanCode),
@@ -4084,19 +4261,40 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         ) {
             val learning = windowLearning
             if (learning == null || event.keyCode == KeyEvent.KEYCODE_BACK) return@filter WheelZoomKeys.Action.PASS
-            if (inCall(this) || !WheelZoomSettings.siriKey(this)) {
+            if (!GeelyVendorPolicy.bydAdb && !learning.foregroundOnly) return@filter WheelZoomKeys.Action.PASS
+            val enabled = if (learning.foregroundOnly) when (learning.role) {
+                WheelZoomSettings.Role.SIRI -> ForegroundWheelSettings.siriDoublePress(this)
+                WheelZoomSettings.Role.MEDIA_PLAY_PAUSE -> ForegroundWheelSettings.mediaPlayPause(this)
+                else -> false
+            } else when (learning.role) {
+                WheelZoomSettings.Role.SIRI -> WheelZoomSettings.siriKey(this)
+                WheelZoomSettings.Role.MEDIA_PLAY_PAUSE -> WheelZoomSettings.mediaPlayPause(this)
+                else -> false
+            }
+            if (inCall(this) || !enabled || (learning.foregroundOnly && !hasWindowFocus())) {
                 cancelKeyLearning()
                 return@filter WheelZoomKeys.Action.PASS
+            }
+            if (learning.foregroundOnly && !ForegroundWheelSettings.isAssignableKey(learning.role, event.keyCode)) {
+                toast(getString(R.string.settings_wheel_reserved_key))
+                return@filter WheelZoomKeys.Action.PASS
+            }
+            if (!learning.foregroundOnly && learning.role == WheelZoomSettings.Role.MEDIA_PLAY_PAUSE &&
+                CarPlayRemoteKeys.isProtectedNavigationKey(event.keyCode)) {
+                toast(getString(R.string.wheel_media_navigation_reserved))
+                return@filter WheelZoomKeys.Action.CONSUME
             }
             handler.removeCallbacks(endWindowLearning)
             windowLearning = null
             val key = WheelKey.of(event)
-            val taken = WheelZoomSettings.conflict(this, learning.role, key)
+            val taken = if (learning.foregroundOnly) ForegroundWheelSettings.conflict(this, learning.role, key)
+                else WheelZoomSettings.conflict(this, learning.role, key)
             if (taken != null) {
                 Log.i(WheelKeyService.TAG, "${learning.role} key $key refused: it is the $taken key (learnt without the service)")
                 learning.refused(taken)
             } else {
-                WheelZoomSettings.assign(this, learning.role, key)
+                if (learning.foregroundOnly) ForegroundWheelSettings.assign(this, learning.role, key)
+                else WheelZoomSettings.assign(this, learning.role, key)
                 Log.i(WheelKeyService.TAG, "${learning.role} key is now $key (learnt without the service)")
                 learning.done(key)
             }
@@ -5338,7 +5536,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         else open()
     }
     private fun openProjection() {
-        startActivity(Intent(this, CarPlayHostActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
+        OwnScreenStart.start(this, Intent(this, CarPlayHostActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT))
     }
     private fun choosePhone() {
         if (Build.VERSION.SDK_INT >= 31 && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) != PackageManager.PERMISSION_GRANTED) {
@@ -5360,7 +5558,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 .setMessage(message)
                 .setPositiveButton(getString(R.string.open_bluetooth)) { _, _ ->
                     bluetoothSettingsVisited = true
-                    openSystem(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
+                    openBluetoothSettings()
                 }
                 .setNegativeButton(getString(R.string.later), null).show(); return
         }
@@ -5368,7 +5566,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         if (devices.isEmpty()) {
             appDialogBuilder().setTitle(getString(R.string.pair_your_iphone))
                 .setMessage(getString(R.string.on_your_iphone_open_settings_bluetooth_and_pair_with_the_c))
-                .setPositiveButton(getString(R.string.open_bluetooth)) { _, _ -> openSystem(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) }
+                .setPositiveButton(getString(R.string.open_bluetooth)) { _, _ -> openBluetoothSettings() }
                 .setNegativeButton(getString(R.string.got_it), null).show(); return
         }
         appDialogBuilder().setTitle(getString(R.string.choose_your_iphone))
@@ -5381,7 +5579,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 val start = pendingWireless; pendingWireless = false
                 render()
                 if (start) connect(true)
-            }.setNeutralButton(getString(R.string.pair_another)) { _, _ -> openSystem(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) }
+            }.setNeutralButton(getString(R.string.pair_another)) { _, _ -> openBluetoothSettings() }
             .setNegativeButton(getString(R.string.cancel)) { _, _ -> pendingWireless = false }.show()
     }
 
@@ -5791,7 +5989,8 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
             SettingsSection.CLUSTER_MAP -> GeelyVendorPolicy.bydCluster
             SettingsSection.BYD_NAVIGATION -> GeelyVendorPolicy.bydNavigation
             SettingsSection.AMBIENT_LIGHTING -> GeelyVendorPolicy.bydAmbientLamp
-            SettingsSection.WHEEL_KEYS, SettingsSection.NAVIGATION_WHEEL, SettingsSection.BYD_ADB -> GeelyVendorPolicy.bydAdb
+            SettingsSection.WHEEL_KEYS -> GeelyVendorPolicy.bydAdb || ForegroundWheelSettings.available()
+            SettingsSection.NAVIGATION_WHEEL, SettingsSection.BYD_ADB -> GeelyVendorPolicy.bydAdb
             else -> true
         }
         if (!capability || settingsSectionFilter?.contains(key) == false) return
@@ -6460,6 +6659,21 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
 
         private const val BYD_VEHICLE_TAG = "DiPlay-BYD13"
         private const val VEHICLE_VALIDATION_RETRY_MILLIS = 500L
+
+        // BYD's settings app answers sixty standard android.settings actions with an activity in its
+        // "unsupport" package instead of a real screen. It does nothing but report string/unsupport_tips
+        // ("the multimedia system does not support this operation"), and startActivity reports success
+        // when it reaches it, so reaching it cannot be told apart from a real screen by catching a throw.
+        private const val BYD_SETTINGS_PACKAGE = "com.byd.vehiclesettings"
+        private const val BYD_SETTINGS_TAG = "DiPlay-Settings"
+
+        // BYD's own screens. An explicit component skips intent-filter matching, so the decoy cannot
+        // answer one. Source: docs/BYD_SETTINGS_ENTRY_POINTS.md.
+        private val BYD_BLUETOOTH_MANAGER =
+            ComponentName("com.byd.btsetting", "com.byd.btsetting.BluetoothManagerDialog")
+        private val BYD_HOTSPOT =
+            ComponentName(BYD_SETTINGS_PACKAGE, "$BYD_SETTINGS_PACKAGE.system.mvp.view.link.hotspot.PerHospotActivity")
+
         private const val ADB_KEY_SAVE_WAIT_MILLIS = 500L
         private const val APPEARANCE_POLL_MILLIS = 2_000L
         private const val APPEARANCE_BUTTON_TAG = "app_appearance_button"

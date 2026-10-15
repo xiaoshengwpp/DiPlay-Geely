@@ -1,5 +1,6 @@
 package com.shilapi.xcertplay
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -14,4 +15,50 @@ class WheelSiriKeyTest {
         assertFalse(siri.opens(1_800))
         assertTrue(siri.opens(1_800 + WheelSiriKey.REPEAT_GAP_MILLIS))
     }
+
+    @Test fun secondDistinctPressInsideTheConfiguredWindowOpensSiri() {
+        val siri = WheelSiriKey()
+        assertEquals(WheelSiriKey.DoublePressAction.FIRST, siri.onDoublePress(1_000, 600))
+        assertEquals(WheelSiriKey.DoublePressAction.CONFIRMED, siri.onDoublePress(1_450, 600))
+        // A completed pair never lends its second press to the next pair.
+        assertEquals(WheelSiriKey.DoublePressAction.FIRST, siri.onDoublePress(1_700, 600))
+        assertEquals(WheelSiriKey.DoublePressAction.CONFIRMED, siri.onDoublePress(2_250, 600))
+    }
+
+    @Test fun expiredPairsAndHeldKeyRepeatsDoNotOpenSiri() {
+        val siri = WheelSiriKey()
+        assertEquals(WheelSiriKey.DoublePressAction.FIRST, siri.onDoublePress(1_000, 500))
+        assertEquals(WheelSiriKey.DoublePressAction.FIRST, siri.onDoublePress(1_700, 500))
+        for (time in 1_800L..2_200L step 100) {
+            assertEquals(WheelSiriKey.DoublePressAction.REPEAT, siri.onDoublePress(time, 500))
+        }
+        siri.reset()
+        assertEquals(WheelSiriKey.DoublePressAction.FIRST, siri.onDoublePress(3_000, 500))
+        assertEquals(WheelSiriKey.DoublePressAction.CONFIRMED, siri.onDoublePress(3_300, 500))
+    }
+    @Test fun configuredDoublePressBoundariesAreInclusive() {
+        val siri = WheelSiriKey()
+        assertEquals(WheelSiriKey.DoublePressAction.FIRST, siri.onDoublePress(1_000, 600))
+        assertEquals(WheelSiriKey.DoublePressAction.REPEAT, siri.onDoublePress(1_179, 600))
+        assertEquals(WheelSiriKey.DoublePressAction.CONFIRMED, siri.onDoublePress(1_359, 600))
+        assertEquals(WheelSiriKey.DoublePressAction.FIRST, siri.onDoublePress(2_000, 600))
+        assertEquals(WheelSiriKey.DoublePressAction.CONFIRMED, siri.onDoublePress(2_600, 600))
+        assertEquals(WheelSiriKey.DoublePressAction.FIRST, siri.onDoublePress(3_000, 600))
+        assertEquals(WheelSiriKey.DoublePressAction.FIRST, siri.onDoublePress(3_601, 600))
+    }
+
+    @Test fun resetOrNonIncreasingEventTimeCannotCompleteAnOldPair() {
+        val siri = WheelSiriKey()
+        siri.onDoublePress(1_000, 600)
+        assertEquals(WheelSiriKey.DoublePressAction.FIRST, siri.onDoublePress(1_000, 600))
+        assertEquals(WheelSiriKey.DoublePressAction.FIRST, siri.onDoublePress(900, 600))
+        siri.reset()
+        assertEquals(WheelSiriKey.DoublePressAction.FIRST, siri.onDoublePress(1_200, 600))
+    }
+
+    @Test(expected = IllegalArgumentException::class)
+    fun doublePressWindowCannotBeShorterThanHeldKeyRepeatGuard() {
+        WheelSiriKey().onDoublePress(1_000, WheelSiriKey.MIN_DOUBLE_PRESS_GAP_MILLIS - 1)
+    }
+
 }

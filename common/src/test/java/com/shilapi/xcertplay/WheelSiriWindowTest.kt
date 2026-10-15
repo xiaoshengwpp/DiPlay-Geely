@@ -39,6 +39,7 @@ class WheelSiriWindowTest {
     private lateinit var host: CarPlayHostActivity
     private lateinit var settings: DiPlayActivity
     private lateinit var controller: CarPlayController
+    private var sessionToken: Any = Any()
 
     @Before fun setUp() {
         BydCarPlayCall.end()
@@ -47,6 +48,7 @@ class WheelSiriWindowTest {
         host = Robolectric.buildActivity(CarPlayHostActivity::class.java).get()
         settings = Robolectric.buildActivity(DiPlayActivity::class.java).get()
         host.getSharedPreferences("diplay_wheel_map_zoom", Context.MODE_PRIVATE).edit().clear().commit()
+        host.getSharedPreferences("diplay_foreground_wheel_keys", Context.MODE_PRIVATE).edit().clear().commit()
         host.getSharedPreferences("xcertplay_airplay", Context.MODE_PRIVATE).edit().clear().commit()
         WheelZoomSettings.setSiriKey(host, true)
         WheelZoomSettings.assign(host, WheelZoomSettings.Role.SIRI, WheelKey(KeyEvent.KEYCODE_F6, 0, "?"))
@@ -55,11 +57,14 @@ class WheelSiriWindowTest {
         host.getSystemService(AudioManager::class.java).mode = AudioManager.MODE_NORMAL
         controller = mock(CarPlayController::class.java)
         `when`(controller.requestSiri()).thenReturn(true)
+        `when`(controller.requestSiri(any(), any())).thenReturn(true)
+        `when`(controller.activeAirPlaySessionToken()).thenReturn(sessionToken)
         field("controller", controller)
-        field("activeAirPlaySession", mock(AirPlaySession::class.java))
+        field("activeAirPlaySession", phoneSession())
     }
 
     @After fun tearDown() {
+        host.getSharedPreferences("diplay_foreground_wheel_keys", Context.MODE_PRIVATE).edit().clear().commit()
         for (name in listOf("teardownExecutor", "airPlayCommandExecutor")) {
             (host.javaClass.getDeclaredField(name).apply { isAccessible = true }.get(host) as ExecutorService).shutdownNow()
         }
@@ -142,7 +147,7 @@ class WheelSiriWindowTest {
         field("activeAirPlaySession", null)
         val code = CarPlayMediaButton.KEYCODE_BYD_AUTO_MEDIA_VOICE
         assertFalse(host.dispatchKeyEvent(key(code, true)))
-        field("activeAirPlaySession", mock(AirPlaySession::class.java))
+        field("activeAirPlaySession", phoneSession())
         assertFalse(host.dispatchKeyEvent(key(code, false)))
         verify(controller, never()).requestSiri()
     }
@@ -213,7 +218,7 @@ class WheelSiriWindowTest {
         val before = prefs.all.toMap()
         val controls = wheelControls()
         assertNoWheelServiceControls(controls)
-        assertEquals(0, controls.childCount)
+        assertGenericControlsOff(controls)
         assertEquals(before, prefs.all)
     }
 
@@ -228,7 +233,7 @@ class WheelSiriWindowTest {
         assertFalse(CarHotspotSetup.isBydHeadUnit(settings))
         val controls = wheelControls()
         assertNoWheelServiceControls(controls)
-        assertEquals(0, controls.childCount)
+        assertGenericControlsOff(controls)
         assertFalse(WheelZoomSettings.joystick(settings))
         assertEquals(joystickKey, WheelZoomSettings.key(settings, WheelZoomSettings.Role.JOYSTICK))
         assertEquals(before, prefs.all)
@@ -249,7 +254,7 @@ class WheelSiriWindowTest {
             assertNull(ClusterMapPresentation.findDisplay(settings))
             val controls = wheelControls()
             assertNoWheelServiceControls(controls)
-            assertEquals(0, controls.childCount)
+            assertGenericControlsOff(controls)
             assertFalse(WheelZoomSettings.enabled(settings))
             assertEquals(before, prefs.all)
         } finally {
@@ -288,4 +293,323 @@ class WheelSiriWindowTest {
     private fun key(code: Int, down: Boolean, repeat: Int = 0) =
         KeyEvent(1_000, 1_000, if (down) KeyEvent.ACTION_DOWN else KeyEvent.ACTION_UP,
             code, repeat, 0, -1, 0)
+    @Test fun importedDoublePressOptionsCannotActivateEitherInputRoute() {
+        val prefs = host.getSharedPreferences("diplay_wheel_map_zoom", Context.MODE_PRIVATE)
+        prefs.edit().putBoolean("siri_double_press", true).putInt("siri_trigger_delay", 0).commit()
+        val before = prefs.all.toMap()
+        val service = Robolectric.buildService(WheelKeyService::class.java).create().get()
+        var backendReads = 0
+        service.session = { backendReads++; Any() }
+        service.requestSiri = { fail("disabled service must not request Siri"); false }
+        service.javaClass.getDeclaredMethod("onServiceConnected").apply { isAccessible = true }.invoke(service)
+        try {
+            for (time in listOf(1_000L, 1_450L)) {
+                for (down in listOf(true, false)) {
+                    val event = key(KeyEvent.KEYCODE_F6, down, time = time)
+                    assertFalse(service.javaClass.getDeclaredMethod("onKeyEvent", KeyEvent::class.java)
+                        .apply { isAccessible = true }.invoke(service, event) as Boolean)
+                    assertFalse(WheelKeyService.observedDoubleSiri(event))
+                    assertFalse(host.dispatchKeyEvent(event))
+                }
+            }
+            shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofSeconds(2))
+            assertEquals(0, backendReads)
+            assertFalse(WheelKeyService.connected())
+            assertFalse(WheelZoomSettings.siriDoublePress(host))
+            verify(controller, never()).requestSiri()
+            verify(controller, never()).requestSiri(any(), any())
+            assertEquals(before, prefs.all)
+        } finally {
+            service.onDestroy()
+        }
+    }
+
+    @Test fun importedMediaSettingCannotStartWindowLearningOrCaptureReservedKeys() {
+        val prefs = settings.getSharedPreferences("diplay_wheel_map_zoom", Context.MODE_PRIVATE)
+        prefs.edit().putBoolean("media_play_pause", true).commit()
+        val before = prefs.all.toMap()
+        var learned = 0
+        val accepted = settings.javaClass.getDeclaredMethod("learnInWindow", WheelZoomSettings.Role::class.java,
+            kotlin.jvm.functions.Function0::class.java, kotlin.jvm.functions.Function1::class.java,
+            kotlin.jvm.functions.Function1::class.java).apply { isAccessible = true }
+            .invoke(settings, WheelZoomSettings.Role.MEDIA_PLAY_PAUSE, {},
+                { _: WheelZoomSettings.Role -> fail("disabled learning must not check conflicts") },
+                { _: WheelKey -> learned++ }) as Boolean
+        assertFalse(accepted)
+        for (code in listOf(KeyEvent.KEYCODE_F9, KeyEvent.KEYCODE_DPAD_CENTER)) {
+            assertFalse(settings.dispatchKeyEvent(key(code, true)))
+            assertFalse(settings.dispatchKeyEvent(key(code, true, repeat = 1)))
+            assertFalse(settings.dispatchKeyEvent(key(code, false)))
+        }
+        assertEquals(0, learned)
+        assertEquals(before, prefs.all)
+        assertGenericControlsOff(wheelControls())
+    }
+
+    @Test fun forgedPendingMediaLearningRemainsInertBeforeReservedKeyHandling() {
+        val prefs = settings.getSharedPreferences("diplay_wheel_map_zoom", Context.MODE_PRIVATE)
+        prefs.edit().putBoolean("media_play_pause", true).commit()
+        val before = prefs.all.toMap()
+        val cancelled: () -> Unit = { fail("disabled dispatch must not touch learning state") }
+        val refused: (WheelZoomSettings.Role) -> Unit = { fail("disabled dispatch must not check conflicts") }
+        val learned: (WheelKey) -> Unit = { fail("disabled dispatch must not save an assignment") }
+        val pendingType = settings.javaClass.declaredClasses.single { it.simpleName == "WindowKeyLearning" }
+        val pending = pendingType.declaredConstructors.single().apply { isAccessible = true }
+            .newInstance(WheelZoomSettings.Role.MEDIA_PLAY_PAUSE, cancelled, refused, learned)
+        val learningField = settings.javaClass.getDeclaredField("windowLearning").apply { isAccessible = true }
+        learningField.set(settings, pending)
+        for (code in listOf(KeyEvent.KEYCODE_DPAD_CENTER, KeyEvent.KEYCODE_F9)) {
+            assertFalse(settings.dispatchKeyEvent(key(code, true)))
+            assertFalse(settings.dispatchKeyEvent(key(code, true, repeat = 1)))
+            assertFalse(settings.dispatchKeyEvent(key(code, false)))
+        }
+        assertSame(pending, learningField.get(settings))
+        assertEquals(before, prefs.all)
+    }
+
+    private fun assertGenericControlsOff(controls: View) {
+        assertNoWheelServiceControls(controls)
+        assertFalse(ForegroundWheelSettings.mediaPlayPause(settings))
+        assertFalse(ForegroundWheelSettings.siriDoublePress(settings))
+        assertTrue(views(controls).filterIsInstance<Switch>().all { !it.isChecked })
+    }
+
+    private fun enableForegroundSiri(code: Int = KeyEvent.KEYCODE_F6) {
+        ForegroundWheelSettings.setSiriDoublePress(host, true)
+        ForegroundWheelSettings.assign(host, WheelZoomSettings.Role.SIRI, WheelKey(code, 0, "?"))
+    }
+
+    private fun observedPress(time: Long, code: Int = KeyEvent.KEYCODE_F6, device: Int = -1) {
+        assertFalse(host.dispatchKeyEvent(key(code, true, time = time, device = device)))
+        assertFalse(host.dispatchKeyEvent(key(code, false, time = time + 100, device = device)))
+    }
+
+    private fun idleSiriDelay() = shadowOf(android.os.Looper.getMainLooper())
+        .idleFor(java.time.Duration.ofMillis(300))
+
+    @Test fun foregroundDoubleSiriObservesBothPressesAndWaitsForTheSecondRelease() {
+        enableForegroundSiri()
+        observedPress(1_000)
+        assertFalse(host.dispatchKeyEvent(key(KeyEvent.KEYCODE_F6, true, time = 1_450)))
+        idleSiriDelay()
+        verify(controller, never()).requestSiri(any(), any())
+        assertFalse(host.dispatchKeyEvent(key(KeyEvent.KEYCODE_F6, false, time = 1_550)))
+        shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(299))
+        verify(controller, never()).requestSiri(any(), any())
+        shadowOf(android.os.Looper.getMainLooper()).idleFor(java.time.Duration.ofMillis(1))
+        verify(controller, times(1)).requestSiri(same(sessionToken), any())
+        verify(controller, never()).requestSiri()
+        assertFalse(WheelKeyService.connected())
+        assertFalse(WheelKeyService.wanted(host))
+    }
+
+    @Test fun foregroundDoubleVoiceKeyDoesNotAlsoRunTheLegacyReleasePath() {
+        enableForegroundSiri(KeyEvent.KEYCODE_VOICE_ASSIST)
+        observedPress(1_000, KeyEvent.KEYCODE_VOICE_ASSIST)
+        observedPress(1_450, KeyEvent.KEYCODE_VOICE_ASSIST)
+        idleSiriDelay()
+        verify(controller, times(1)).requestSiri(same(sessionToken), any())
+        verify(controller, never()).requestSiri()
+    }
+
+    @Test fun aFirstPressCannotTransferToAnotherAirPlaySession() {
+        enableForegroundSiri()
+        observedPress(1_000)
+        field("activeAirPlaySession", phoneSession())
+        observedPress(1_450)
+        idleSiriDelay()
+        verify(controller, never()).requestSiri(any(), any())
+        observedPress(1_900)
+        idleSiriDelay()
+        verify(controller, times(1)).requestSiri(same(sessionToken), any())
+    }
+
+    @Test fun aFirstPressCannotTransferToARenegotiatedPrimaryStream() {
+        enableForegroundSiri()
+        observedPress(1_000)
+        sessionToken = Any()
+        `when`(controller.activeAirPlaySessionToken()).thenReturn(sessionToken)
+        val current = host.javaClass.getDeclaredField("activeAirPlaySession").apply { isAccessible = true }.get(host) as AirPlaySession
+        `when`(current.mainScreenSessionToken()).thenReturn(sessionToken)
+        observedPress(1_450)
+        idleSiriDelay()
+        verify(controller, never()).requestSiri(any(), any())
+        observedPress(1_900)
+        idleSiriDelay()
+        verify(controller, times(1)).requestSiri(same(sessionToken), any())
+    }
+
+    @Test fun firstPressesOnDifferentPhysicalDevicesCannotFormAPair() {
+        enableForegroundSiri()
+        observedPress(1_000, device = 91)
+        observedPress(1_450, device = 92)
+        idleSiriDelay()
+        verify(controller, never()).requestSiri(any(), any())
+    }
+
+    @Test fun aChangedAndRestoredAssignmentCannotReviveTheFirstPress() {
+        enableForegroundSiri()
+        observedPress(1_000)
+        ForegroundWheelSettings.assign(host, WheelZoomSettings.Role.SIRI, WheelKey(KeyEvent.KEYCODE_F7, 0, "?"))
+        ForegroundWheelSettings.assign(host, WheelZoomSettings.Role.SIRI, WheelKey(KeyEvent.KEYCODE_F6, 0, "?"))
+        observedPress(1_450)
+        idleSiriDelay()
+        verify(controller, never()).requestSiri(any(), any())
+    }
+
+    @Test fun aSecondPressDuringACallCannotOpenSiriAfterTheCallEnds() {
+        enableForegroundSiri()
+        observedPress(1_000)
+        host.getSystemService(AudioManager::class.java).mode = AudioManager.MODE_IN_CALL
+        observedPress(1_450)
+        host.getSystemService(AudioManager::class.java).mode = AudioManager.MODE_NORMAL
+        idleSiriDelay()
+        verify(controller, never()).requestSiri(any(), any())
+    }
+
+    @Test fun aConfirmedPairIsCancelledWhenACallStartsBeforeTheDelay() {
+        enableForegroundSiri()
+        observedPress(1_000)
+        observedPress(1_450)
+        host.getSystemService(AudioManager::class.java).mode = AudioManager.MODE_IN_COMMUNICATION
+        idleSiriDelay()
+        verify(controller, never()).requestSiri(any(), any())
+    }
+
+    @Test fun pausingTheHostCancelsAConfirmedPair() {
+        enableForegroundSiri()
+        observedPress(1_000)
+        observedPress(1_450)
+        host.javaClass.getDeclaredMethod("onPause").apply { isAccessible = true }.invoke(host)
+        idleSiriDelay()
+        verify(controller, never()).requestSiri(any(), any())
+    }
+
+    @Test fun destroyingTheHostCancelsAConfirmedPair() {
+        enableForegroundSiri()
+        observedPress(1_000)
+        observedPress(1_450)
+        host.javaClass.getDeclaredMethod("onDestroy").apply { isAccessible = true }.invoke(host)
+        idleSiriDelay()
+        verify(controller, never()).requestSiri(any(), any())
+    }
+
+    @Test fun queuedSiriRechecksTokenCallSettingsAndLifecycleOwnership() {
+        enableForegroundSiri()
+        val queued = mutableListOf<() -> Boolean>()
+        doAnswer { invocation ->
+            queued += invocation.getArgument<() -> Boolean>(1)
+            true
+        }.`when`(controller).requestSiri(any(), any())
+        observedPress(1_000)
+        observedPress(1_450)
+        idleSiriDelay()
+        assertEquals(1, queued.size)
+        val allowed = queued.single()
+        assertTrue(allowed())
+        host.getSystemService(AudioManager::class.java).mode = AudioManager.MODE_IN_CALL
+        assertFalse(allowed())
+        host.getSystemService(AudioManager::class.java).mode = AudioManager.MODE_NORMAL
+        assertTrue(allowed())
+        `when`(controller.activeAirPlaySessionToken()).thenReturn(Any())
+        assertFalse(allowed())
+        `when`(controller.activeAirPlaySessionToken()).thenReturn(sessionToken)
+        ForegroundWheelSettings.setSiriDoublePress(host, false)
+        ForegroundWheelSettings.setSiriDoublePress(host, true)
+        assertFalse(allowed())
+        host.javaClass.getDeclaredMethod("onPause").apply { isAccessible = true }.invoke(host)
+        assertFalse(allowed())
+    }
+
+    private fun learnForeground(activity: DiPlayActivity, role: WheelZoomSettings.Role,
+        cancelled: () -> Unit = {}, refused: (WheelZoomSettings.Role) -> Unit = {},
+        done: (WheelKey) -> Unit): Boolean =
+        DiPlayActivity::class.java.getDeclaredMethod("learnForegroundKeyInWindow", WheelZoomSettings.Role::class.java,
+            kotlin.jvm.functions.Function0::class.java, kotlin.jvm.functions.Function1::class.java,
+            kotlin.jvm.functions.Function1::class.java).apply { isAccessible = true }
+            .invoke(activity, role, cancelled, refused, done) as Boolean
+
+    @Test fun foregroundLearningRequiresOptInAndFocusThenCapturesOnlyOnePress() {
+        val focused = spy(settings)
+        doReturn(true).`when`(focused).hasWindowFocus()
+        var learned: WheelKey? = null
+        assertFalse(learnForeground(focused, WheelZoomSettings.Role.MEDIA_PLAY_PAUSE) { learned = it })
+        ForegroundWheelSettings.setMediaPlayPause(focused, true)
+        doReturn(false).`when`(focused).hasWindowFocus()
+        assertFalse(learnForeground(focused, WheelZoomSettings.Role.MEDIA_PLAY_PAUSE) { learned = it })
+        doReturn(true).`when`(focused).hasWindowFocus()
+        assertTrue(learnForeground(focused, WheelZoomSettings.Role.MEDIA_PLAY_PAUSE) { learned = it })
+        assertTrue(focused.dispatchKeyEvent(key(KeyEvent.KEYCODE_F9, true)))
+        assertTrue(focused.dispatchKeyEvent(key(KeyEvent.KEYCODE_F9, true, repeat = 1)))
+        assertTrue(focused.dispatchKeyEvent(key(KeyEvent.KEYCODE_F9, false)))
+        assertEquals(WheelKey(KeyEvent.KEYCODE_F9, 0, "?"), learned)
+        assertEquals(learned, ForegroundWheelSettings.key(focused, WheelZoomSettings.Role.MEDIA_PLAY_PAUSE))
+        assertNull(WheelZoomSettings.key(focused, WheelZoomSettings.Role.MEDIA_PLAY_PAUSE))
+        assertFalse(WheelKeyService.connected())
+    }
+
+    @Test fun foregroundLearningPassesReservedKeysAndRejectsAnActiveAssignmentConflict() {
+        val focused = spy(settings)
+        doReturn(true).`when`(focused).hasWindowFocus()
+        ForegroundWheelSettings.setMediaPlayPause(focused, true)
+        ForegroundWheelSettings.setSiriDoublePress(focused, true)
+        ForegroundWheelSettings.assign(focused, WheelZoomSettings.Role.SIRI, WheelKey(KeyEvent.KEYCODE_F6, 0, "?"))
+        var learned = 0
+        var refused: WheelZoomSettings.Role? = null
+        assertTrue(learnForeground(focused, WheelZoomSettings.Role.MEDIA_PLAY_PAUSE,
+            refused = { refused = it }) { learned++ })
+        assertFalse(focused.dispatchKeyEvent(key(KeyEvent.KEYCODE_DPAD_CENTER, true)))
+        assertFalse(focused.dispatchKeyEvent(key(KeyEvent.KEYCODE_DPAD_CENTER, false)))
+        assertTrue(focused.dispatchKeyEvent(key(KeyEvent.KEYCODE_F6, true)))
+        assertTrue(focused.dispatchKeyEvent(key(KeyEvent.KEYCODE_F6, false)))
+        assertEquals(WheelZoomSettings.Role.SIRI, refused)
+        assertEquals(0, learned)
+        assertNull(ForegroundWheelSettings.key(focused, WheelZoomSettings.Role.MEDIA_PLAY_PAUSE))
+    }
+
+    @Test fun foregroundLearningCancelsOnLostFocusBeforeAnyAssignment() {
+        val focused = spy(settings)
+        doReturn(true).`when`(focused).hasWindowFocus()
+        ForegroundWheelSettings.setMediaPlayPause(focused, true)
+        var cancelled = 0
+        var learned = 0
+        assertTrue(learnForeground(focused, WheelZoomSettings.Role.MEDIA_PLAY_PAUSE,
+            cancelled = { cancelled++ }) { learned++ })
+        doReturn(false).`when`(focused).hasWindowFocus()
+        focused.onWindowFocusChanged(false)
+        assertFalse(focused.dispatchKeyEvent(key(KeyEvent.KEYCODE_F9, true)))
+        assertFalse(focused.dispatchKeyEvent(key(KeyEvent.KEYCODE_F9, false)))
+        assertEquals(1, cancelled)
+        assertEquals(0, learned)
+        assertNull(ForegroundWheelSettings.key(focused, WheelZoomSettings.Role.MEDIA_PLAY_PAUSE))
+    }
+
+    private fun phoneSession(token: Any = sessionToken): AirPlaySession = mock(AirPlaySession::class.java).also {
+        `when`(it.mainScreenSessionToken()).thenReturn(token)
+    }
+
+    @Test fun controllerAndActivityPrimaryStreamsMustAgreeBeforeAFirstPress() {
+        enableForegroundSiri()
+        field("activeAirPlaySession", phoneSession(Any()))
+        observedPress(1_000)
+        observedPress(1_450)
+        idleSiriDelay()
+        verify(controller, never()).requestSiri(any(), any())
+    }
+
+    @Test fun losingWindowFocusCancelsADoublePressAndItsQueuedCommand() {
+        enableForegroundSiri()
+        var allowed: (() -> Boolean)? = null
+        doAnswer { invocation ->
+            allowed = invocation.getArgument<() -> Boolean>(1)
+            true
+        }.`when`(controller).requestSiri(any(), any())
+        observedPress(1_000)
+        observedPress(1_450)
+        idleSiriDelay()
+        assertTrue(allowed?.invoke() == true)
+        host.onWindowFocusChanged(false)
+        assertFalse(allowed?.invoke() == true)
+    }
+
 }

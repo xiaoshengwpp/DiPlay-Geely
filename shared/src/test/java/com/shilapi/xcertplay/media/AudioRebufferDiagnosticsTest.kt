@@ -6,6 +6,8 @@ import com.shilapi.xcertplay.airplay.AudioCodecKind
 import com.shilapi.xcertplay.airplay.AudioFormat
 import java.io.Closeable
 import java.util.concurrent.BlockingQueue
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.atomic.AtomicInteger
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
@@ -27,7 +29,7 @@ class AudioRebufferDiagnosticsTest {
 
     @Test fun rebufferingReportsRetainedPcmAndRecoversWithoutFlushingIt() {
         val reports = mutableListOf<String>()
-        RendererFixture(reports::add).use { renderer ->
+        RendererFixture(report = reports::add).use { renderer ->
             renderer.write(renderer.threshold)
             assertTrue(TestTrack.playing)
             assertTrue(reports.isEmpty()) // Initial playback is not recovery.
@@ -46,7 +48,7 @@ class AudioRebufferDiagnosticsTest {
 
     @Test fun tenSeparateRebufferAndOverflowEpisodesAreCappedAtFiveReportsEach() {
         val reports = mutableListOf<String>()
-        RendererFixture(reports::add).use { renderer ->
+        RendererFixture(report = reports::add).use { renderer ->
             renderer.write(renderer.threshold)
             repeat(10) {
                 renderer.starve()
@@ -83,8 +85,35 @@ class AudioRebufferDiagnosticsTest {
         }
     }
 
+    @Test fun failingStalePacketDiagnosticsCannotEscapeSubmissionOrLoseTheNewestPacket() {
+        var reports = 0
+        RendererFixture {
+            reports++
+            throw IllegalStateException("Report unavailable")
+        }.use { renderer ->
+            repeat(10) { renderer.recoverStalePackets() }
+            assertEquals(5, reports)
+            assertEquals(10, (renderer.get("packetsReceived") as AtomicInteger).get())
+            assertTrue((renderer.get("packetsDropped") as AtomicInteger).get() > 0)
+        }
+    }
+
+    @Test fun packetRecoveryIsPerMusicRendererAndCannotDiscardCallOrNavigationAudio() {
+        for (audioType in listOf("telephony", "speechrecognition", "default", "alert")) {
+            RendererFixture(audioType) {}.use { renderer ->
+                assertNull("$audioType must not discard priority audio", renderer.get("mediaLagGuard"))
+            }
+        }
+        RendererFixture {}.use { first ->
+            RendererFixture {}.use { second ->
+                assertNotNull(first.get("mediaLagGuard"))
+                assertNotSame(first.get("mediaLagGuard"), second.get("mediaLagGuard"))
+            }
+        }
+    }
+
     /** Exercise the production worker methods without starting an asynchronous decoder thread. */
-    private class RendererFixture(report: (String) -> Unit) : Closeable {
+    private class RendererFixture(audioType: String = "media", report: (String) -> Unit) : Closeable {
         private val plan = MediaAudioBuffer.plan(true, 48_000, 2, 4096, 500)
         val threshold = MediaAudioBuffer.startBytesFor(plan.startBytes, plan.trackBufferBytes, 4096)
         private val track = AudioTrack.Builder()
@@ -96,7 +125,7 @@ class AudioRebufferDiagnosticsTest {
         private val type = Class.forName("com.shilapi.xcertplay.media.AudioRenderer")
         private val renderer = type.declaredConstructors.single { it.parameterCount == 13 }
             .apply { isAccessible = true }.newInstance(
-                AudioFormat(AudioCodecKind.LPCM, 48_000, 2, 96, "media"),
+                AudioFormat(AudioCodecKind.LPCM, 48_000, 2, 96, audioType),
                 false, false, 0, null, AudioFocusCoordinator(null, false, false),
                 0, 500, report, 0L, false, null, false)
         private val packetType = Class.forName("com.shilapi.xcertplay.media.AudioRenderer\$AudioPacket")
@@ -140,6 +169,29 @@ class AudioRebufferDiagnosticsTest {
         fun drain() {
             queue.clear()
             type.getDeclaredMethod("handle", packetType).apply { isAccessible = true }.invoke(renderer, packet)
+        }
+
+        fun recoverStalePackets() {
+            set("started", true)
+            @Suppress("UNCHECKED_CAST")
+            val packets = queue as LinkedBlockingQueue<Any>
+            val guard = get("mediaLagGuard") as MediaPacketLagGuard
+            val sampleField = packetType.getDeclaredField("sample").apply { isAccessible = true }
+            val timestampOf: (Any) -> Int = { sampleField.getInt(it) }
+            val newestSample = 150 * 1024
+            val nowNs = System.nanoTime()
+            packets.clear()
+            guard.recover(packets, newestSample, timestampOf, nowNs) // Rearm after a drained episode.
+            repeat(150) { n ->
+                packets.offer(packetType.declaredConstructors.single().apply { isAccessible = true }
+                    .newInstance(rtp, n * 1024))
+            }
+            guard.recover(packets, newestSample, timestampOf,
+                nowNs - MediaPacketLagGuard.CONGESTION_GRACE_NS - 1)
+            type.getDeclaredMethod("submit", ByteArray::class.java, Int::class.javaPrimitiveType)
+                .apply { isAccessible = true }.invoke(renderer, rtp, newestSample)
+            assertEquals(newestSample, timestampOf(packets.last()))
+            assertTrue("stale packets were not recovered", packets.size < 150)
         }
 
         override fun close() {

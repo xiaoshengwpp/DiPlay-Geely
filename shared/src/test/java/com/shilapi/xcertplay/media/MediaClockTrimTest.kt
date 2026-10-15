@@ -144,4 +144,69 @@ class MediaClockTrimTest {
         trim.sample(14_400, 500_000_000L)
         assertNull(trim.rateDue(500_000_000L))
     }
+
+    @Test fun aLargeCompressedQueueMustNotTrickClockControlIntoSlowingDownFurther() {
+        val trim = MediaClockTrim(48_000, 14_400)
+        // The #806 recording had 150-192 pending AAC packets while Android's track writes
+        // reported a small hardware PCM queue. Those packets are not 'missing' music.
+        for (second in 1..12) {
+            trim.sample(4_800, second * 1_000_000_000L, compressedFrames = 96 * 1024L)
+            trim.rateDue(second * 1_000_000_000L)
+        }
+        assertTrue("slow playback grows a 2-second packet backlog; rate=${trim.rate}", trim.rate >= 48_000)
+        // Decoder congestion is not a characteristic of the vehicle's playback clock. A future
+        // song should not inherit a +1.5% learned pitch error caused by a temporary stall.
+        assertEquals(0.0, MediaClockTrim.learnedTrim, 1e-8)
+    }
+
+    @Test fun continuousWritesForgetCongestionBeforeLearningTheNextSongsClock() {
+        MediaClockTrim.learnedTrim = -0.0075
+        val trim = MediaClockTrim(48_000, 14_400)
+        // Real decoder output is roughly every 20 ms, so the 250 ms stale-sample reset
+        // cannot hide a congestion-contaminated five-second moving average.
+        repeat(600) { tick ->
+            val nowNs = tick * 20_000_000L
+            trim.sample(4_800, nowNs, compressedFrames = 96 * 1024L)
+            trim.rateDue(nowNs)
+        }
+        assertEquals(-0.0075, MediaClockTrim.learnedTrim, 1e-10)
+        repeat(600) { tick ->
+            val nowNs = (600 + tick) * 20_000_000L
+            trim.sample(14_400, nowNs)
+            trim.rateDue(nowNs)
+            assertEquals("recovered tick=$tick", 47_640, trim.rate)
+            assertEquals("recovered tick=$tick", -0.0075, MediaClockTrim.learnedTrim, 1e-10)
+        }
+        val nextSong = MediaClockTrim(48_000, 14_400)
+        nextSong.sample(14_400, 0)
+        assertEquals(47_640, nextSong.rateDue(0))
+    }
+
+    @Test fun congestionImmediatelyReplacesALowPcmAverageWithoutLearningIt() {
+        val trim = MediaClockTrim(48_000, 14_400)
+        trim.sample(0, 0)
+        trim.rateDue(0)
+        assertEquals(47_280, trim.rate)
+        // A queue just over the target would take several seconds to overcome the old
+        // negative EMA unless entering congestion also restarts the average.
+        for (tick in 1..50) {
+            val nowNs = tick * 20_000_000L
+            trim.sample(0, nowNs, compressedFrames = 14_401)
+            trim.rateDue(nowNs)
+        }
+        assertTrue("congested rate=${trim.rate}", trim.rate >= 48_000)
+        assertEquals(0.0, MediaClockTrim.learnedTrim, 1e-10)
+    }
+
+    @Test fun drainingToASmallCompressedTailRestartsFromTheCombinedLevel() {
+        val trim = MediaClockTrim(48_000, 14_400)
+        repeat(100) { tick ->
+            val nowNs = tick * 20_000_000L
+            trim.sample(4_800, nowNs, compressedFrames = 96 * 1024L)
+            trim.rateDue(nowNs)
+        }
+        trim.sample(7_200, 2_000_000_000L, compressedFrames = 7_200)
+        assertEquals(48_000, trim.rateDue(2_000_000_000L))
+        assertEquals(0.0, MediaClockTrim.learnedTrim, 1e-10)
+    }
 }
