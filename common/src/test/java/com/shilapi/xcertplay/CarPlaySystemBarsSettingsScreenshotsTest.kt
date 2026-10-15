@@ -5,12 +5,14 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Switch
 import android.widget.TextView
 import com.shilapi.xcertplay.host.R
 import java.io.File
 import java.io.FileOutputStream
 import java.util.Locale
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertFalse
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.Robolectric
@@ -43,11 +45,27 @@ class CarPlaySystemBarsSettingsScreenshotsTest {
                     .apply { isAccessible = true }.invoke(activity) as ViewGroup
                 val labels = descendants(section).filterIsInstance<TextView>().map { it.text.toString() }.toList()
                 assertTrue(labels.any { it == activity.getString(R.string.temporary_system_bars) })
-                assertTrue(labels.any { it == activity.getString(R.string.temporary_system_bars_description) })
+                // Overlay rows render the title; their description is exposed on the switch.
+                val temporaryBarsSwitch = descendants(section).filterIsInstance<Switch>().single {
+                    it.contentDescription == activity.getString(R.string.temporary_system_bars_description)
+                }
+                val enabledField = CarPlayHostActivity::class.java.getDeclaredField("temporarySystemBarsEnabled")
+                    .apply { isAccessible = true }
+                assertFalse(temporaryBarsSwitch.isChecked)
+                assertFalse(enabledField.getBoolean(activity))
+                temporaryBarsSwitch.isChecked = true
+                assertTrue(enabledField.getBoolean(activity))
+                temporaryBarsSwitch.isChecked = false
+                assertFalse(enabledField.getBoolean(activity))
                 val width = (widthDp * activity.resources.displayMetrics.density).toInt()
                 section.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
                     View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
                 section.layout(0, 0, width, section.measuredHeight)
+                descendants(section).filterIsInstance<TextView>().filter { it.text.isNotEmpty() }.forEach { label ->
+                    val layout = requireNotNull(label.layout)
+                    assertTrue("Label must fit $name: ${label.text}", layout.getLineBottom(layout.lineCount - 1) <=
+                        label.height - label.compoundPaddingTop - label.compoundPaddingBottom)
+                }
                 val bitmap = Bitmap.createBitmap(width, section.measuredHeight, Bitmap.Config.ARGB_8888)
                 try {
                     section.draw(Canvas(bitmap))
