@@ -290,9 +290,9 @@ class WheelSiriWindowTest {
     private fun field(name: String, value: Any?) = host.javaClass.getDeclaredField(name)
         .apply { isAccessible = true }.set(host, value)
 
-    private fun key(code: Int, down: Boolean, repeat: Int = 0) =
-        KeyEvent(1_000, 1_000, if (down) KeyEvent.ACTION_DOWN else KeyEvent.ACTION_UP,
-            code, repeat, 0, -1, 0)
+    private fun key(code: Int, down: Boolean, repeat: Int = 0, time: Long = 1_000, device: Int = -1) =
+        KeyEvent(time, time, if (down) KeyEvent.ACTION_DOWN else KeyEvent.ACTION_UP,
+            code, repeat, 0, device, 0)
     @Test fun importedDoublePressOptionsCannotActivateEitherInputRoute() {
         val prefs = host.getSharedPreferences("diplay_wheel_map_zoom", Context.MODE_PRIVATE)
         prefs.edit().putBoolean("siri_double_press", true).putInt("siri_trigger_delay", 0).commit()
