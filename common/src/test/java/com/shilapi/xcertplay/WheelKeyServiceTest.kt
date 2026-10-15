@@ -6,6 +6,7 @@ import android.media.AudioManager
 import android.os.Looper
 import android.view.KeyEvent
 import android.widget.Button
+import com.shilapi.xcertplay.airplay.CarPlayMediaButton
 import com.shilapi.xcertplay.hud.BydOutputSettings
 import com.shilapi.xcertplay.hud.BydCarPlayCall
 import com.shilapi.xcertplay.hud.CarPlayCallState
@@ -38,6 +39,7 @@ class WheelKeyServiceTest {
         service = Robolectric.buildService(WheelKeyService::class.java).create().get()
         service.getSharedPreferences("diplay_navigation_wheel", Context.MODE_PRIVATE).edit().clear().commit()
         service.getSharedPreferences("diplay_wheel_map_zoom", Context.MODE_PRIVATE).edit().clear().commit()
+        service.getSharedPreferences("diplay_foreground_wheel_keys", Context.MODE_PRIVATE).edit().clear().commit()
         service.mapRoute = { backendReads++; route }
         service.session = { backendReads++; phone }
         service.routeActive = { backendReads++; routeStarted }
@@ -56,6 +58,7 @@ class WheelKeyServiceTest {
     }
 
     @After fun tearDown() {
+        service.getSharedPreferences("diplay_foreground_wheel_keys", Context.MODE_PRIVATE).edit().clear().commit()
         assertEquals("Geely must not query any wheel backend", 0, backendReads)
         assertTrue("Geely must not send knob input", knobs.isEmpty())
         assertEquals("Geely must not request Siri from accessibility", 0, siriRequests)
@@ -411,6 +414,126 @@ class WheelKeyServiceTest {
         playback = com.shilapi.xcertplay.media.NavigationPlaybackSnapshot(true, AudioManager.STREAM_NOTIFICATION, true)
         assertFalse(dispatch(event(KeyEvent.ACTION_DOWN, 6)))
         assertEquals(3, audio.getStreamVolume(AudioManager.STREAM_MUSIC))
+    }
+
+    @Test fun newHiddenWheelOptionsDefaultOffAndIgnoreEnableAttempts() {
+        val prefs = service.getSharedPreferences("diplay_wheel_map_zoom", Context.MODE_PRIVATE)
+        val before = prefs.all.toMap()
+        assertFalse(WheelZoomSettings.mediaPlayPause(service))
+        assertFalse(WheelZoomSettings.siriDoublePress(service))
+        assertEquals(600, WheelZoomSettings.siriDoublePressIntervalMillis(service))
+        assertEquals(300, WheelZoomSettings.siriTriggerDelayMillis(service))
+        WheelZoomSettings.setMediaPlayPause(service, true)
+        WheelZoomSettings.setSiriDoublePress(service, true)
+        WheelZoomSettings.setSiriDoublePressIntervalMillis(service, 800)
+        WheelZoomSettings.setSiriTriggerDelayMillis(service, 500)
+        assertEquals(before, prefs.all)
+        assertFalse(WheelZoomSettings.anyEnabled(service))
+        assertFalse(WheelKeyService.wanted(service))
+    }
+
+    @Test fun importedDoubleSiriAndPlayPauseCannotActivateTheAccessibilityFilter() {
+        val prefs = service.getSharedPreferences("diplay_wheel_map_zoom", Context.MODE_PRIVATE)
+        prefs.edit().putBoolean("media_play_pause", true).putBoolean("siri_double_press", true)
+            .putString("key_MEDIA_PLAY_PAUSE", WheelKey(KeyEvent.KEYCODE_F9, 0, "?").encode())
+            .putString("key_SIRI", WheelKey(KeyEvent.KEYCODE_F6, 0, "?").encode()).commit()
+        val before = prefs.all.toMap()
+        var mediaRequests = 0
+        service.sendMedia = { mediaRequests++; true }
+        assertFalse(WheelZoomSettings.mediaPlayPause(service))
+        assertFalse(WheelZoomSettings.siriDoublePress(service))
+        assertFalse(WheelZoomSettings.isMediaPlayPauseKey(service, WheelKey(KeyEvent.KEYCODE_F9, 0, "?")))
+        assertFalse(WheelZoomSettings.anyEnabled(service))
+        assertFalse(WheelKeyService.wanted(service))
+        for (code in listOf(KeyEvent.KEYCODE_F6, KeyEvent.KEYCODE_F9,
+            CarPlayMediaButton.KEYCODE_BYD_CARPLAY_VOICE)) {
+            for (time in listOf(1_000L, 1_450L)) {
+                assertFalse(key(code, true, time = time))
+                assertFalse(key(code, true, repeat = 1, time = time))
+                assertFalse(key(code, false, time = time + 100))
+            }
+        }
+        service.onInterrupt()
+        shadowOf(Looper.getMainLooper()).idleFor(Duration.ofSeconds(2))
+        assertEquals(0, mediaRequests)
+        assertEquals(0, siriRequests)
+        assertEquals(0, backendReads)
+        assertEquals(before, prefs.all)
+        assertFalse(WheelKeyService.observedDoubleSiri(KeyEvent(1_000, 1_000,
+            KeyEvent.ACTION_DOWN, KeyEvent.KEYCODE_F6, 0)))
+        assertFalse(WheelKeyService.learn(WheelZoomSettings.Role.MEDIA_PLAY_PAUSE) { _, _ -> learned++ })
+    }
+
+    @Test fun invalidImportedDoublePressTimingsFallBackWithoutEnablingTheFeature() {
+        service.getSharedPreferences("diplay_wheel_map_zoom", Context.MODE_PRIVATE).edit()
+            .putInt("siri_double_press_interval", -1).putInt("siri_trigger_delay", Int.MAX_VALUE).commit()
+        assertEquals(600, WheelZoomSettings.siriDoublePressIntervalMillis(service))
+        assertEquals(300, WheelZoomSettings.siriTriggerDelayMillis(service))
+        assertFalse(WheelZoomSettings.siriDoublePress(service))
+    }
+
+    @Test fun foregroundOptInsUseFreshStorageAndNeverStartVendorCapture() {
+        val vendor = service.getSharedPreferences("diplay_wheel_map_zoom", Context.MODE_PRIVATE)
+        val before = vendor.all.toMap()
+        assertFalse(ForegroundWheelSettings.mediaPlayPause(service))
+        assertFalse(ForegroundWheelSettings.siriDoublePress(service))
+        assertNull(ForegroundWheelSettings.key(service, WheelZoomSettings.Role.SIRI))
+        assertNull(ForegroundWheelSettings.key(service, WheelZoomSettings.Role.MEDIA_PLAY_PAUSE))
+        ForegroundWheelSettings.setMediaPlayPause(service, true)
+        ForegroundWheelSettings.setSiriDoublePress(service, true)
+        ForegroundWheelSettings.assign(service, WheelZoomSettings.Role.MEDIA_PLAY_PAUSE,
+            WheelKey(KeyEvent.KEYCODE_F9, 0, "?"))
+        ForegroundWheelSettings.assign(service, WheelZoomSettings.Role.SIRI,
+            WheelKey(KeyEvent.KEYCODE_F6, 0, "?"))
+        assertTrue(ForegroundWheelSettings.mediaPlayPause(service))
+        assertTrue(ForegroundWheelSettings.siriDoublePress(service))
+        assertTrue(ForegroundWheelSettings.isSiriKey(service, WheelKey(KeyEvent.KEYCODE_F6, 0, "?")))
+        assertFalse(WheelZoomSettings.anyEnabled(service))
+        assertFalse(WheelKeyService.wanted(service))
+        assertFalse(WheelKeyService.connected())
+        assertFalse(WheelKeyService.learn(WheelZoomSettings.Role.MEDIA_PLAY_PAUSE) { _, _ -> learned++ })
+        assertEquals(false to false, press(KeyEvent.KEYCODE_F9))
+        assertEquals(false to false, press(KeyEvent.KEYCODE_F6))
+        assertEquals(before, vendor.all)
+    }
+
+    @Test fun foregroundSettingsRejectReservedRolesAndKeysAndFenceEffectiveChanges() {
+        assertEquals(0L, ForegroundWheelSettings.revision(service))
+        ForegroundWheelSettings.setMediaPlayPause(service, false)
+        ForegroundWheelSettings.assign(service, WheelZoomSettings.Role.MEDIA_PLAY_PAUSE,
+            WheelKey(KeyEvent.KEYCODE_DPAD_CENTER, 0, "?"))
+        ForegroundWheelSettings.assign(service, WheelZoomSettings.Role.MODE, WheelKey(KeyEvent.KEYCODE_F9, 0, "?"))
+        assertEquals(0L, ForegroundWheelSettings.revision(service))
+        assertNull(ForegroundWheelSettings.key(service, WheelZoomSettings.Role.MEDIA_PLAY_PAUSE))
+        ForegroundWheelSettings.setMediaPlayPause(service, true)
+        val enabled = ForegroundWheelSettings.revision(service)
+        ForegroundWheelSettings.setMediaPlayPause(service, true)
+        assertEquals(enabled, ForegroundWheelSettings.revision(service))
+        ForegroundWheelSettings.assign(service, WheelZoomSettings.Role.MEDIA_PLAY_PAUSE,
+            WheelKey(KeyEvent.KEYCODE_F9, 0, "?"))
+        val assigned = ForegroundWheelSettings.revision(service)
+        assertTrue(assigned > enabled)
+        ForegroundWheelSettings.setMediaPlayPause(service, false)
+        ForegroundWheelSettings.setMediaPlayPause(service, true)
+        assertTrue(ForegroundWheelSettings.revision(service) > assigned)
+        assertFalse(ForegroundWheelSettings.isMediaPlayPauseKey(service, WheelKey(KeyEvent.KEYCODE_F9, 1, "?")))
+        assertFalse(ForegroundWheelSettings.isMediaPlayPauseKey(service, WheelKey(KeyEvent.KEYCODE_F9, 0, "other")))
+    }
+
+    @Test fun foregroundAssignmentsRejectActiveConflictsWithoutTouchingLegacySettings() {
+        val key = WheelKey(KeyEvent.KEYCODE_F9, 0, "?")
+        ForegroundWheelSettings.setMediaPlayPause(service, true)
+        ForegroundWheelSettings.assign(service, WheelZoomSettings.Role.MEDIA_PLAY_PAUSE, key)
+        assertEquals(WheelZoomSettings.Role.MEDIA_PLAY_PAUSE,
+            ForegroundWheelSettings.conflict(service, WheelZoomSettings.Role.SIRI, key))
+        ForegroundWheelSettings.setMediaPlayPause(service, false)
+        assertNull(ForegroundWheelSettings.conflict(service, WheelZoomSettings.Role.SIRI, key))
+        ForegroundWheelSettings.setSiriDoublePress(service, true)
+        ForegroundWheelSettings.assign(service, WheelZoomSettings.Role.SIRI, key)
+        assertEquals(WheelZoomSettings.Role.SIRI,
+            ForegroundWheelSettings.conflict(service, WheelZoomSettings.Role.MEDIA_PLAY_PAUSE, key))
+        assertTrue(ForegroundWheelSettings.isAssignableKey(WheelZoomSettings.Role.SIRI, KeyEvent.KEYCODE_VOICE_ASSIST))
+        assertFalse(ForegroundWheelSettings.isAssignableKey(WheelZoomSettings.Role.MEDIA_PLAY_PAUSE, KeyEvent.KEYCODE_VOICE_ASSIST))
     }
 
 }

@@ -302,6 +302,7 @@ class CarPlayController(
     private var attachCloseable: Closeable? = null
     private var ch341PermissionCloseable: Closeable? = null
     private var lastCh341Listing: String? = null
+    private var lastIphoneListing: String? = null
     private var vpnLatch = CountDownLatch(1)
     private val teardownComplete = CountDownLatch(1)
 
@@ -318,13 +319,31 @@ class CarPlayController(
     }
 
     private val callStateLock = Any()
+    private data class SessionCornerMask(val session: AirPlaySession, val png: ByteArray, val width: Int)
+    @Volatile private var currentCornerMask: SessionCornerMask? = null
+
+    /** The video session can outlive its Activity; the new host must be able to replay the mask. */
+    fun activeIphoneCornerMask(): Triple<AirPlaySession, ByteArray, Int>? = synchronized(callStateLock) {
+        val current = currentCornerMask ?: return@synchronized null
+        if (closed || activeSession !== current.session || current.session.isClosed) return@synchronized null
+        Triple(current.session, current.png.copyOf(), current.width)
+    }
 
     private val sessionListener = object : AirPlaySessionListener {
+        override fun onCornerMask(session: AirPlaySession, png: ByteArray, displayWidth: Int) {
+            synchronized(callStateLock) {
+                if (closed || session.isClosed) return
+                if (activeSession != null && activeSession !== session) return
+                currentCornerMask = SessionCornerMask(session, png.copyOf(), displayWidth)
+            }
+            uiListener?.onCornerMask(session, png, displayWidth)
+        }
         override fun onSessionActive(session: AirPlaySession) {
             val (replacement, replacingConnectedSession) = synchronized(callStateLock) {
                 if (closed) return
                 val changed = activeSession !== session
                 val replacing = changed && activeSession != null
+                if (currentCornerMask?.session !== session) currentCornerMask = null
                 activeSession = session
                 CarPlayCallGuard.start(this@CarPlayController, session)
                 changed to replacing
@@ -360,6 +379,7 @@ class CarPlayController(
 
         override fun onSessionEnded(session: AirPlaySession) {
             val ended = synchronized(callStateLock) {
+                if (currentCornerMask?.session === session) currentCornerMask = null
                 if (activeSession !== session) false else {
                     activeSession = null
                     CarPlayCallGuard.end(this@CarPlayController, session)
@@ -675,7 +695,10 @@ class CarPlayController(
             wirelessGeneration.incrementAndGet()
             dashboardMapOutputVisible = false
         }
-        synchronized(callStateLock) { CarPlayCallGuard.end(this) }
+        synchronized(callStateLock) {
+            currentCornerMask = null
+            CarPlayCallGuard.end(this)
+        }
         firstTcpWatchdog?.terminate()
         BydBluetoothSuspend.resume(appContext, this) { debugLog(it) }
         startupTimer.shutdownNow()
@@ -1897,9 +1920,11 @@ class CarPlayController(
         if (closed || phase != Phase.IPHONE) return
         val device = iphoneHost.discover().firstOrNull()
         if (device == null) {
+            reportIphoneMissing()
             onStatus(CarPlayStatus.WaitingForIphone)
             scheduleAvailabilityPoll(Phase.IPHONE, ::checkIphoneAvailability)
         } else {
+            lastIphoneListing = null
             debugLog(
                 "wired iPhone discovered vid=0x${device.vendorId.toString(16)} " +
                     "pid=0x${device.productId.toString(16)}",
@@ -1907,6 +1932,16 @@ class CarPlayController(
             availabilityPollGeneration.incrementAndGet()
             requestIphonePermission(device)
         }
+    }
+
+    // "iPhone USB device not present" said only that no Apple device was listed. What Android does list shows
+    // whether it sees anything on the head unit's port, a USB stick for example, or nothing at all (#763).
+    // Each poll reports only a change.
+    private fun reportIphoneMissing() {
+        val listed = runCatching { iphoneHost.listedDevices().joinToString(", ") }.getOrElse { "unavailable" }
+        if (listed == lastIphoneListing) return
+        lastIphoneListing = listed
+        debugLog("wired iPhone not listed by Android; USB devices=[$listed]")
     }
 
     private fun requestIphonePermission(device: UsbDevice) {
@@ -2354,6 +2389,7 @@ class CarPlayController(
                     "${result.diagnostic}. Open the car hotspot settings and connect again.")
             }
         }
+        var pastOffReport = false
         if (hotspotMode == WirelessHotspotMode.MANUAL) {
             val state = com.shilapi.xcertplay.network.CarHotspotStatus.isEnabled(appContext)
             if (com.shilapi.xcertplay.network.CarHotspotSettings.reportedOff(appContext, state)) {
@@ -2361,6 +2397,7 @@ class CarPlayController(
                     "The car hotspot is off. Turn it on in the car settings and connect again.")
             }
             if (state == false) debugLog("car hotspot: Android reports it off; connecting anyway, as the driver chose")
+            pastOffReport = state == false
         }
         val manager: WirelessHotspotManager = when (hotspotMode) {
             WirelessHotspotMode.WIFI_P2P -> WifiP2pGroupManager(appContext, ::debugLog,
@@ -2407,6 +2444,11 @@ class CarPlayController(
             if (hotspot === manager) hotspot = null
             closeBestEffort(hotspotMode.name) { manager.close() }
             if (isStaleWirelessRun(generation)) throw failure
+            if (pastOffReport && (failure as? WirelessStartupException)?.reason == WirelessStartupFailure.HOTSPOT_NOT_READY &&
+                com.shilapi.xcertplay.network.CarHotspotSettings.hotspotNeverCameUp(
+                    appContext, com.shilapi.xcertplay.network.CarHotspotStatus.isEnabled(appContext))) {
+                debugLog("car hotspot: Android still reports it off and no hotspot came up; the off warning is back")
+            }
             throw IOException(
                 "Could not establish ${hotspotMode.name} hotspot: " +
                     (failure.message ?: failure.javaClass.simpleName),

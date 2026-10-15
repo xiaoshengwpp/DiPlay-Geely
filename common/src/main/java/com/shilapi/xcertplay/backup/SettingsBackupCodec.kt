@@ -1,6 +1,7 @@
 package com.shilapi.xcertplay.backup
 
 import android.content.Context
+import com.shilapi.xcertplay.CarPlayBlackCornerOverlay
 import com.shilapi.xcertplay.CarPlayPicture
 import com.shilapi.xcertplay.airplay.CarPlayDisplayScale
 import com.shilapi.xcertplay.airplay.CarPlayUiScale
@@ -34,6 +35,8 @@ object SettingsBackupCodec {
             "display_scale_tenths" to integers(CarPlayDisplayScale.MIN_TENTHS..CarPlayDisplayScale.MAX_TENTHS),
             "ui_scale_percent" to ValueType.Integer(CarPlayUiScale.presets.toSet()),
             "display_fps" to ValueType.Integer((30..60 step 5).toSet()),
+            "temporary_system_bars" to ValueType.Flag,
+            "black_corner_radius_dp" to ValueType.Integer(CarPlayBlackCornerOverlay.RADII_DP.toSet()),
             "hevc_enabled" to ValueType.Flag,
             "advanced_audio_channel_mapping" to ValueType.Flag,
             "media_audio_channel" to integers(0..20),

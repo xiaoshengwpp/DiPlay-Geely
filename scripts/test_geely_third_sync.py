@@ -46,7 +46,8 @@ class ThirdUpstreamSyncTest(unittest.TestCase):
     def test_byd_long_press_preference_stays_product_gated(self):
         activity = (COMMON / 'DiPlayActivity.kt').read_text()
         section = activity.split('private fun wheelKeysSettings(', 1)[1].split('private fun wheelMapZoomAvailable', 1)[0]
-        self.assertIn('if (!GeelyVendorPolicy.bydAdb) return', section)
+        self.assertIn('if (!GeelyVendorPolicy.bydAdb) {\n            foregroundWheelControls(card)\n            return\n        }', section)
+        self.assertLess(section.index('if (!GeelyVendorPolicy.bydAdb)'), section.index('wheelKeyServiceControls(card)'))
         self.assertIn('if (GeelyVendorPolicy.bydAdb && (byd || WheelZoomSettings.siriLongPressOnly(this)))', section)
 
 if __name__ == '__main__':

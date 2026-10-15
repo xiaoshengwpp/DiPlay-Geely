@@ -1,3 +1,19 @@
+# DiPlay-Geely unreleased source update, 2026-10-15
+
+Reviewed official main `969f871433b76f6c59f3c93619f7cb5872fdd15d` → `1b1ac5f27986ce83b6d17fdd8c4d1be852fbbb70` (37 commits, 61 upstream paths). Official release remains 0.2.20. This is source integration, not a signed release or vehicle acceptance.
+
+- Count compressed music backlog, bound sustained stale music, and retain music-only clock correction. Fork regressions isolate diagnostic failures, prevent a producer/consumer stale-head race, and reset congestion-contaminated clock history at normal 20 ms packet cadence.
+- Re-request media focus only on fresh iPhone playback after transient loss. A newer focus event or replacement request invalidates queued resumes; Android must grant focus before audio is restored.
+- Show the actual wireless permission/startup failure and retry exhaustion. Clear the manual hotspot off-report override only after HOTSPOT_NOT_READY while Android still reports off. A working hotspot retains the driver's override.
+- Add optional five-second system bars and local black-corner fill. Experimental iPhone mask mode remains off by default, needs the next connection, and has a 24 dp fallback. No real-iPhone or vehicle compatibility claim.
+- Improve own-screen launch recovery, diagnostic crash frames, and USB device-list evidence without serial numbers or changed USB permission policy.
+- Add default-off, explicitly learned Android-key play/pause and double-Siri while the CarPlay screen is visible. Fresh foreground-only preferences do not activate ignored BYD settings. Existing Geely InputService opt-ins, standard media controls and call/session/AVRCP guards remain. BYD settings, global accessibility capture and ADB stay disabled.
+- Backup retains a typed per-setting allowlist: only the temporary-bars boolean and explicit corner-radius choices were added; language, identities, network secrets and consent remain excluded.
+
+SYSTEM language and saved choices, explicit call-speaker preference, microphone selection, navigation gain, public-display consent and all vendor/runtime gates remain. Version stays `0.2.20-geely.1` / `39001` until an authorized release. Owner signing workflow and its historical source pin are unchanged. See [integration and validation](GEELY-UPSTREAM-20261015.md).
+
+## Earlier integration history
+
 # DiPlay-Geely 0.2.20-geely.1 source candidate
 
 The reviewed 0.2.20 update adds USB/CH341 listing diagnostics and a consent-bound call-earpiece fallback. Default calls do not acquire a new route; the existing loudspeaker choice is sampled at call start. See [the current integration record](GEELY-UPSTREAM-0.2.20.md). This is not a signed release or vehicle acceptance.

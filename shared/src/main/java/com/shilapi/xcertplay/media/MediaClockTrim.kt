@@ -21,18 +21,29 @@ internal class MediaClockTrim(
     private var level: Double? = null
     private var lastSampleNs = 0L
     private var lastUpdateNs: Long? = null
+    private var compressedBacklog = false
 
     /** The playback rate last asked of the track, in Hz. */
     var rate = sampleRate
         private set
 
-    /** Records the queued level right after a write while music plays. */
-    fun sample(queuedFrames: Long, nowNs: Long) {
+    /** Include compressed packets waiting for decode: those frames are already queued audio. */
+    fun sample(queuedFrames: Long, nowNs: Long, compressedFrames: Long = 0L) {
         if (targetFrames <= 0L) return
-        val error = (queuedFrames - targetFrames).toDouble() / targetFrames
+        // Decoder backpressure is not evidence that the head unit's clock runs at a different
+        // rate; do not teach the *next* music stream an artificial clock correction.
+        val previousBacklog = compressedBacklog
+        compressedBacklog = compressedFrames > targetFrames
+        val buffered = queuedFrames.coerceAtLeast(0L) +
+            compressedFrames.coerceIn(0L, sampleRate.toLong() * 16L)
+        val error = (buffered - targetFrames).toDouble() / targetFrames
         val previous = level
-        // After a pause, a rebuffer or the first write the average restarts from what is queued now.
-        level = if (previous == null || nowNs - lastSampleNs > STALE_NS) error
+        // A backlog transition is not clock drift. Start from the current queue so a low PCM
+        // average cannot slow an already congested decoder, and a five-second congestion tail
+        // cannot be learned as hardware drift once compressed packets have drained. Normal
+        // 20 ms writes never trigger the stale-sample reset, even after recovery.
+        level = if (previous == null || nowNs - lastSampleNs > STALE_NS ||
+            previousBacklog != compressedBacklog) error
         else previous + (error - previous) * (1.0 - exp(-(nowNs - lastSampleNs).toDouble() / AVERAGE_NS))
         lastSampleNs = nowNs
     }
@@ -47,8 +58,10 @@ internal class MediaClockTrim(
         // A pause between updates is not drift: integrate at most one normal step over it.
         val seconds = if (previousUpdate == null) 0.0 else ((nowNs - previousUpdate) / 1e9).coerceAtMost(MAX_STEP_SECONDS)
         lastUpdateNs = nowNs
-        integral = (integral + KI * error * seconds).coerceIn(-MAX_TRIM, MAX_TRIM)
-        learnedTrim = integral
+        if (!compressedBacklog) {
+            integral = (integral + KI * error * seconds).coerceIn(-MAX_TRIM, MAX_TRIM)
+            learnedTrim = integral
+        }
         val next = (sampleRate * (1.0 + (KP * error + integral).coerceIn(-MAX_TRIM, MAX_TRIM))).roundToInt()
         if (next == rate) return null
         rate = next

@@ -26,9 +26,9 @@ android {
 
     testOptions {
         unitTests.isIncludeAndroidResources = true
-        // The UI suite covers several SDKs and locale-specific resource sandboxes.
+        // The UI suite covers several SDKs and locale-specific resource sandboxes; 1g is insufficient.
         unitTests.all {
-            it.maxHeapSize = "1g"
+            it.maxHeapSize = "2g"
             it.jvmArgs("-javaagent:${mockitoAgent.singleFile.absolutePath}")
         }
     }
