@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="settings_geely_capabilities">Compatibilità Geely (sperimentale)</string>
+    <string name="settings_geely_input">Interfaccia comandi per unità sconosciuta (sperimentale)</string>
+    <string name="settings_geely_input_description">Consenti il servizio comandi Geely su un\'unità non verificata. Il servizio deve essere accessibile; si applica alla prossima connessione CarPlay. Per l\'hardware noto viene usato il rilevamento automatico.</string>
+    <string name="settings_geely_siri_source">Sorgente microfono Siri (sperimentale)</string>
+    <string name="settings_geely_auto">Automatica</string>
+    <string name="settings_geely_standard">Standard · riconoscimento vocale</string>
+    <string name="settings_geely_compatible">Compatibile · comunicazione vocale</string>
+    <string name="settings_geely_siri_description">Si applica alla prossima richiesta Siri. Automatica usa la sorgente compatibile solo per il profilo hardware noto del progetto originale. Il microfono delle chiamate rimane invariato.</string>
+    <string name="settings_geely_hud_display">Schermo di navigazione (sperimentale)</string>
+    <string name="settings_geely_hud_off">Disattivato</string>
+    <string name="settings_geely_hud_unavailable">Questo schermo non è più disponibile.</string>
+    <string name="settings_geely_hud_description">Scegli manualmente uno schermo secondario visibile ad Android. Solo indicazioni di navigazione; nessuna mappa completa o protocollo HUD del costruttore. La scelta è temporanea e viene cancellata alla disconnessione o alla rimozione dello schermo. Se non compare alcuno schermo, l\'interfaccia del costruttore non è accessibile all\'app.</string>
+    <string name="settings_wheel_foreground_only">Solo in primo piano: queste assegnazioni funzionano solo quando CarPlay è visibile e la sua finestra è attiva. I tasti intercettati dall\'auto potrebbero non arrivare a DiPlay.</string>
+    <string name="settings_wheel_siri_foreground_description">Scegli un tasto Android disponibile. Una pressione mantiene l\'azione originale; due pressioni aprono Siri dopo il ritardo selezionato, mentre CarPlay resta in primo piano. Durante le chiamate o senza connessione, il tasto mantiene l\'azione originale. Si applica subito.</string>
+    <string name="settings_wheel_media_foreground_description">Scegli un tasto Android disponibile per riprodurre o mettere in pausa l\'audio CarPlay in primo piano. I tasti di navigazione e di sistema sono riservati. Durante le chiamate o senza connessione, il tasto mantiene l\'azione originale. Si applica subito.</string>
+    <string name="settings_wheel_foreground_unavailable">Attiva prima questo tasto, mantieni questa schermata delle impostazioni in primo piano e riprova quando non sei in chiamata.</string>
+    <string name="settings_wheel_reserved_key">Questo tasto è riservato. Scegli un tasto libero.</string>
+</resources>

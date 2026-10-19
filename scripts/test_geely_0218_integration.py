@@ -132,7 +132,7 @@ class Geely0218IntegrationTest(unittest.TestCase):
         # Assert the reviewed behavior rather than pinning unrelated whitespace/comments to a blob.
         text = (COMMON / 'AppLocale.kt').read_text()
         for required in ('if (locales.isEmpty) return SYSTEM',
-                         '.getString(KEY_LANGUAGE, SYSTEM)?.takeIf { it in ALL } ?: SYSTEM',
+                         '.getString(KEY_LANGUAGE, SIMPLIFIED_CHINESE)?.takeIf { it in ALL } ?: SYSTEM',
                          'if (prefs.getBoolean(KEY_MIGRATED, false)) return',
                          'if (manager.applicationLocales.isEmpty && previous != null)',
                          'locale(language)?.let { LocaleList(it) } ?: LocaleList.getEmptyLocaleList()',
@@ -142,7 +142,7 @@ class Geely0218IntegrationTest(unittest.TestCase):
                          '"Hans" -> SIMPLIFIED_CHINESE',
                          'else -> if (selected.country in setOf("TW", "HK", "MO"))'):
             self.assertIn(required, text)
-        self.assertNotIn('getString(KEY_LANGUAGE, SIMPLIFIED_CHINESE)', text)
+        self.assertIn('locale(prefs.getString(KEY_LANGUAGE, SIMPLIFIED_CHINESE) ?: SYSTEM)', text)
         self.assertLess(text.index('return when (selected.script)'), text.index('selected.country'))
 
 if __name__ == '__main__':
