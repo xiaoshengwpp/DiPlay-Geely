@@ -95,6 +95,7 @@ class ChooseIphoneTitleTest {
     // The placeholder was English in every language: Traditional Chinese read "選擇 iPhone · Your iPhone".
     @Config(qualifiers = "zh-rTW-w1000dp-h700dp-land")
     @Test fun inTraditionalChineseTheButtonIsAllChinese() {
+        AppLocale.save(context, AppLocale.TRADITIONAL_CHINESE)
         for ((name, screen) in pages()) {
             assertEquals(name, listOf("選擇 iPhone"), chooseButtons(screen))
         }

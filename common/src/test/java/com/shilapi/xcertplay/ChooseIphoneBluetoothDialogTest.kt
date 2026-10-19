@@ -109,6 +109,8 @@ class ChooseIphoneBluetoothDialogTest {
         val screen = open()
         val shown = texts(choosePhone(screen))
         assertTrue(shown.toString(), screen.getString(R.string.pair_your_iphone) in shown)
-        assertFalse(shown.toString(), screen.getString(R.string.turn_on_bluetooth) in shown)
+        // In Chinese, the pairing dialog's "open Bluetooth" action and "turn on Bluetooth"
+        // title share a translation. Test the off-state instruction, not an ambiguous label.
+        assertFalse(shown.toString(), screen.getString(R.string.enable_the_car_s_bluetooth_and_pair_your_iphone_first) in shown)
     }
 }

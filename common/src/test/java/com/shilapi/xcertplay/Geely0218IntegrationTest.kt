@@ -63,7 +63,7 @@ class Geely0218IntegrationTest {
 
     @Test fun newInstallAndEverySavedLanguageSurviveTheIntegration() {
         val context: Context = RuntimeEnvironment.getApplication()
-        assertEquals(AppLocale.SYSTEM, AppLocale.preference(context))
+        assertEquals(AppLocale.SIMPLIFIED_CHINESE, AppLocale.preference(context))
         for (language in AppLocale.ALL) {
             AppLocale.save(context, language)
             repeat(2) {

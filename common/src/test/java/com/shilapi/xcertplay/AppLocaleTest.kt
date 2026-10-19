@@ -20,12 +20,33 @@ class AppLocaleTest {
     private val manager get() = context.getSystemService(LocaleManager::class.java)
 
     @Test @Config(sdk = [28, 32, 33])
-    fun freshInstallFollowsSystemWithoutWritingChinese() {
+    fun unsetLanguageDefaultsToSimplifiedChineseWithoutOverwritingAStoredChoice() {
         val prefs = context.getSharedPreferences("diplay", Context.MODE_PRIVATE)
         prefs.edit().clear().commit()
+        assertEquals(AppLocale.SIMPLIFIED_CHINESE, AppLocale.preference(context))
+        assertFalse(prefs.contains("app_language"))
+    }
+
+    @Test @Config(sdk = [28, 32, 33])
+    fun explicitLegacySystemChoiceIsPreserved() {
+        context.getSharedPreferences("diplay", Context.MODE_PRIVATE).edit()
+            .putString("app_language", AppLocale.SYSTEM).commit()
         assertEquals(AppLocale.SYSTEM, AppLocale.preference(context))
         assertSame(context, AppLocale.wrap(context))
-        assertFalse(prefs.contains("app_language"))
+    }
+
+    @Test fun completedPlatformMigrationPreservesEmptySystemChoice() {
+        context.getSharedPreferences("diplay", Context.MODE_PRIVATE).edit()
+            .putBoolean("app_language_platform_migrated", true).commit()
+        manager.applicationLocales = LocaleList.getEmptyLocaleList()
+        assertEquals(AppLocale.SYSTEM, AppLocale.preference(context))
+        assertTrue(manager.applicationLocales.isEmpty)
+    }
+
+    @Test fun existingPlatformItalianChoiceIsPreservedBeforeMigration() {
+        manager.applicationLocales = LocaleList.forLanguageTags("it")
+        assertEquals(AppLocale.ITALIAN, AppLocale.preference(context))
+        assertEquals("it", manager.applicationLocales.toLanguageTags())
     }
 
     @Test fun existingPlatformChineseIsPreservedEvenAfterEarlierDefaultMigration() {

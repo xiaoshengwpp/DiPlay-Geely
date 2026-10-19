@@ -58,9 +58,19 @@ class GeelyUsbReconnectSourceTest(unittest.TestCase):
         self.assertIn("runStack(result.session, ncm, device.deviceName, generation)", source)
         self.assertIn("ncm: NcmUsbBridge, deviceName: String, generation: Int", source)
         self.assertIn("onIncoming = { frame -> onRouteFrame(frame) { this.csm === csm } }", source)
-        self.assertIn("!closed && this.csm === csm && message.startsWith(START_SESSION_PROGRESS)", source)
+        self.assertIn("!closed && this.csm === csm && generation == availabilityPollGeneration.get() && message.startsWith(START_SESSION_PROGRESS)", source)
         self.assertIn("WiredSessionMemory.started(deviceName)", source)
         self.assertNotIn("wiredDeviceName", source)
+
+    def test_wired_watchdog_cleanup_and_timeout_are_owned_by_one_control_run(self):
+        source = self.function(self.source("orchestration/CarPlayController.kt"),
+                               "    private fun runStack(", "    private fun pairNewRecord(")
+        self.assertIn("var ownedStartWatchdog: WiredStartWatchdog? = null", source)
+        self.assertIn("ownedStartWatchdog = startWatchdog", source)
+        self.assertIn("wiredStartWatchdog === startWatchdog && this.csm === csm", source)
+        self.assertIn("generation == availabilityPollGeneration.get()", source)
+        self.assertIn("ownedStartWatchdog?.terminate()", source)
+        self.assertNotIn("wiredStartWatchdog?.terminate()", source)
 
     def test_closed_usb_open_result_is_disposed_before_ncm_is_opened(self):
         source = self.function(self.source("orchestration/CarPlayController.kt"),

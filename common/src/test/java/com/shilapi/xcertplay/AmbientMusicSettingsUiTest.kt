@@ -65,6 +65,23 @@ class AmbientMusicSettingsUiTest {
         assertFalse(AmbientMusicSettings.load(activity).enabled)
     }
 
+    @Test fun geelyDoesNotShowOrProbeCarRhythmEvenWithAStaleOptIn() {
+        val prefs = activity.getSharedPreferences("ambient_music", 0)
+        for (saved in listOf(false, true)) {
+            prefs.edit().putBoolean("carRhythm", saved).putBoolean("carRhythmFeed", saved).commit()
+            val before = prefs.all
+            var checks = 0
+            activity.carRhythmSupportCheck = { checks++; CompletableFuture.completedFuture(true) }
+            val card = android.widget.LinearLayout(activity)
+            ReflectionHelpers.callInstanceMethod<Unit>(activity, "carRhythmControl",
+                ReflectionHelpers.ClassParameter.from(android.widget.LinearLayout::class.java, card))
+            shadowOf(Looper.getMainLooper()).idle()
+            assertEquals(0, card.childCount)
+            assertEquals(0, checks)
+            assertEquals(before, prefs.all)
+        }
+    }
+
     private fun open(): AlertDialog {
         ReflectionHelpers.callInstanceMethod<Unit>(activity, "showAmbientConfiguration")
         shadowOf(Looper.getMainLooper()).idle()

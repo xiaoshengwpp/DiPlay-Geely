@@ -41,6 +41,7 @@ jobs:
             common/build/reports/black-corner-ui/
             common/build/reports/system-bars-ui/
             common/build/reports/foreground-wheel-ui/
+            common/build/reports/launcher-bubble-ui/
             mobile/build/reports/lint-results-debug.html
             samples/home/build/reports/tests/
             samples/home/build/reports/lint-results-debug.html

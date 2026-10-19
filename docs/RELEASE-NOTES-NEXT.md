@@ -1,3 +1,9 @@
+# DiPlay-Geely 0.2.21-geely.1 source review
+
+Integrates the official 0.2.21 source while retaining the Geely product boundaries. See [scope, exclusions and validation](GEELY-UPSTREAM-0.2.21.md). Source metadata is `0.2.21-geely.1` / `40001`; this is not a signed release or a vehicle acceptance result.
+
+## Previous source integration history
+
 # DiPlay-Geely unreleased source update, 2026-10-15
 
 Reviewed official main `969f871433b76f6c59f3c93619f7cb5872fdd15d` → `1b1ac5f27986ce83b6d17fdd8c4d1be852fbbb70` (37 commits, 61 upstream paths). Official release remains 0.2.20. This is source integration, not a signed release or vehicle acceptance.

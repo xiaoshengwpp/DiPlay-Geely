@@ -10,7 +10,7 @@ import org.robolectric.annotation.Config
 
 /** The live shell adapter was removed; the independent pure lease tests retain state-machine coverage. */
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [32], manifest = Config.NONE)
+@Config(sdk = [29, 32], manifest = Config.NONE)
 class BydCallPopupChannelTest {
     private fun channel(): BydCallPopupChannel = BydCallPopupChannel.prepare("/data/app/base.apk") {
         error("Disabled adapter must not launch a helper or send shell commands")
