@@ -3,7 +3,7 @@ package com.shilapi.xcertplay
 import android.os.Looper
 import org.junit.After
 import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
+import org.junit.Assert.assertEquals
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -13,8 +13,8 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import java.time.Duration
 
-// #883, #803: after the iPhone left, DiPlay kept holding the BYD cluster with no map, and the cluster
-// stayed in BYD's simple mode until the head unit restarted.
+// Geely must never acquire or hand back the unsupported BYD cluster, even after an upstream
+// cluster timeout, a reconnect, or a stale preference imported from another build.
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [29])
 class CarPlayHostClusterHandbackTest {
@@ -22,23 +22,28 @@ class CarPlayHostClusterHandbackTest {
 
     @Before fun setUp() {
         activity = Robolectric.buildActivity(CarPlayHostActivity::class.java).get()
-        AirPlayPersistence.saveClusterMapEnabled(activity, true)
+        activity.getSharedPreferences("xcertplay_airplay", 0).edit().remove("cluster_map_enabled").commit()
     }
 
     @After fun tearDown() {
-        AirPlayPersistence.saveClusterMapEnabled(activity, false)
+        activity.getSharedPreferences("xcertplay_airplay", 0).edit().remove("cluster_map_enabled").commit()
     }
 
-    @Test fun theClusterIsHandedBackFifteenSecondsAfterTheMapStops() {
+    @Test fun savedEnableCannotAcquireOrHandBackTheCluster() {
+        val prefs = activity.getSharedPreferences("xcertplay_airplay", 0)
+        val before = prefs.all
+        AirPlayPersistence.saveClusterMapEnabled(activity, true)
+        assertFalse(AirPlayPersistence.loadClusterMapEnabled(activity))
+        assertEquals(before, prefs.all)
         clusterStream(true)
         clusterStream(false)
         idle(14)
         assertFalse(released())
         idle(1)
-        assertTrue(released())
+        assertFalse(released())
     }
 
-    @Test fun aQuickReconnectKeepsTheCluster() {
+    @Test fun aQuickReconnectNeverAcquiresTheDisabledCluster() {
         clusterStream(true)
         clusterStream(false)
         idle(5)
@@ -47,11 +52,14 @@ class CarPlayHostClusterHandbackTest {
         assertFalse(released())
     }
 
-    @Test fun theNextMapTakesTheClusterAgain() {
+    @Test fun staleEnabledPreferenceCannotReleaseOrReacquireTheCluster() {
+        val prefs = activity.getSharedPreferences("xcertplay_airplay", 0)
+        prefs.edit().putBoolean("cluster_map_enabled", true).commit()
+        assertFalse(AirPlayPersistence.loadClusterMapEnabled(activity))
         clusterStream(true)
         clusterStream(false)
         idle(15)
-        assertTrue(released())
+        assertFalse(released())
         clusterStream(true)
         assertFalse(released())
     }

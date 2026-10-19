@@ -30,9 +30,10 @@ class LauncherBubbleSettingsScreenshotsTest {
     }
 
     @Test fun compactFullAndRtlCardsFitAtLargeFontScale() {
-        for ((locale, widthDp) in listOf("en" to 320, "en" to 960, "ar" to 320, "it" to 320)) {
+        for ((locale, widthDp) in listOf("en" to 320, "en" to 960, "ar" to 320, "it" to 320, "zh" to 320)) {
             RuntimeEnvironment.setQualifiers("$locale-w${widthDp}dp-h960dp-mdpi")
             val app = RuntimeEnvironment.getApplication()
+            AppLocale.save(app, locale)
             val previous = Configuration(app.resources.configuration)
             @Suppress("DEPRECATION")
             app.resources.updateConfiguration(Configuration(previous).apply { fontScale = 1.5f }, app.resources.displayMetrics)

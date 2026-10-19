@@ -2163,7 +2163,7 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
                 val sizes = LauncherBubbleLayout.sizePercents
                 choice(card, getString(R.string.settings_launcher_bubble_size),
                     sizes.map { getString(R.string.percent_value, it) },
-                    sizes.indexOf(AirPlayPersistence.loadLauncherBubbleSize(this)), reconnects = false) {
+                    sizes.indexOf(AirPlayPersistence.loadLauncherBubbleSize(this)), reconnects = false, growForText = true) {
                     AirPlayPersistence.saveLauncherBubbleSize(this, sizes[it])
                 }
                 val overlay = LauncherBubble.permitted(this)
@@ -6255,9 +6255,9 @@ class DiPlayActivity : ComponentActivity(), AppAppearanceOwner {
         parent.addView(result.rowView)
         return result.switch
     }
-    // The car's own music rhythm: saved on only once the head unit's audio call is reachable, from DiPlay itself or
-    // over its ADB access.
+    // Unsupported vehicle controls must remain absent even when this helper is called directly.
     private fun carRhythmControl(card: LinearLayout) {
+        if (!GeelyVendorPolicy.bydAmbientLamp) return
         var row: Switch? = null
         row = toggle(card, getString(R.string.settings_ambient_car_rhythm),
             getString(R.string.settings_ambient_car_rhythm_description), AmbientMusicSettings.load(this).carRhythm) { on ->

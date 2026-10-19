@@ -13,7 +13,7 @@ Wired startup gains a bounded watchdog, USB mode-request recovery and NCM packet
 
 Navigation-only attenuation now scales signed 16-bit PCM instead of relying on a potentially ineffective AudioTrack volume call. Default 0 dB and non-navigation channels pass through untouched. The Geely MEDIA/MUSIC route, short publication lock, nonblocking Settings setter, stale-media recovery and call/render ownership remain. Regression tests retain initial saved gain, concurrent renderer publication and decoder-monitor isolation checks.
 
-The source includes nonfatal software Opus failures, Bluetooth turning-on waits, manual VLAN hotspot interface selection, connection diagnostics, Italian and an optional default-off launcher bubble. Launcher overlay permission is still an explicit user flow. Screenshots cover compact/full English, Arabic RTL and Italian at large font scale.
+The source includes nonfatal software Opus failures, Bluetooth turning-on waits, manual VLAN hotspot interface selection, connection diagnostics, Italian and an optional default-off launcher bubble. Launcher overlay permission is still an explicit user flow. Screenshots cover compact/full English, Arabic RTL, Italian and Simplified Chinese at large font scale.
 
 Missing app language preferences default to Simplified Chinese. Explicit stored SYSTEM and other languages, existing Android13+ platform locales, and completed platform language migrations are preserved. Tests cover the unset default, legacy explicit SYSTEM and platform settings. A pre-Android13 install with no saved app-language choice takes the new default; no explicit choice is overwritten.
 

@@ -65,31 +65,21 @@ class AmbientMusicSettingsUiTest {
         assertFalse(AmbientMusicSettings.load(activity).enabled)
     }
 
-    @Test fun theCarsRhythmIsSavedOnOnlyAfterItsCheckPasses() {
-        activity.carRhythmSupportCheck = { CompletableFuture.completedFuture(false) }
-        var row = carRhythmSwitch()
-        row.isChecked = true
-        shadowOf(Looper.getMainLooper()).idle()
-        assertFalse(AmbientMusicSettings.load(activity).carRhythm)
-        assertFalse(row.isChecked)
-        assertEquals(activity.getString(R.string.settings_ambient_car_rhythm_unavailable), ShadowToast.getTextOfLatestToast())
-
-        activity.carRhythmSupportCheck = { CompletableFuture.completedFuture(true) }
-        row = carRhythmSwitch()
-        row.isChecked = true
-        shadowOf(Looper.getMainLooper()).idle()
-        assertTrue(AmbientMusicSettings.load(activity).carRhythm)
-        row.isChecked = false
-        shadowOf(Looper.getMainLooper()).idle()
-        assertFalse(AmbientMusicSettings.load(activity).carRhythm)
-    }
-
-    private fun carRhythmSwitch(): Switch {
-        val card = android.widget.LinearLayout(activity)
-        ReflectionHelpers.callInstanceMethod<Unit>(activity, "carRhythmControl",
-            ReflectionHelpers.ClassParameter.from(android.widget.LinearLayout::class.java, card))
-        return descendants(card).filterIsInstance<Switch>()
-            .single { it.contentDescription == activity.getString(R.string.settings_ambient_car_rhythm) }
+    @Test fun geelyDoesNotShowOrProbeCarRhythmEvenWithAStaleOptIn() {
+        val prefs = activity.getSharedPreferences("ambient_music", 0)
+        for (saved in listOf(false, true)) {
+            prefs.edit().putBoolean("carRhythm", saved).putBoolean("carRhythmFeed", saved).commit()
+            val before = prefs.all
+            var checks = 0
+            activity.carRhythmSupportCheck = { checks++; CompletableFuture.completedFuture(true) }
+            val card = android.widget.LinearLayout(activity)
+            ReflectionHelpers.callInstanceMethod<Unit>(activity, "carRhythmControl",
+                ReflectionHelpers.ClassParameter.from(android.widget.LinearLayout::class.java, card))
+            shadowOf(Looper.getMainLooper()).idle()
+            assertEquals(0, card.childCount)
+            assertEquals(0, checks)
+            assertEquals(before, prefs.all)
+        }
     }
 
     private fun open(): AlertDialog {

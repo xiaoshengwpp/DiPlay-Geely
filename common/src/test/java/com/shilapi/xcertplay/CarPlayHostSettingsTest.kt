@@ -3,7 +3,6 @@ package com.shilapi.xcertplay
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageInfo
-import android.os.Build
 import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Canvas
@@ -86,23 +85,44 @@ class CarPlayHostSettingsTest {
 
     @Test
     @Config(sdk = [28, 29, 32])
-    fun callPopupSwitchRequiresBydAndAndroid10() {
+    fun geelyCallPopupRemainsUnavailableWithBydPackagesAndStaleOptIn() {
         val description = activity.getString(R.string.settings_hide_byd_call_popup_description)
+        val prefs = activity.getSharedPreferences("xcertplay_airplay", 0)
+        val key = "hide_byd_call_popup"
+        val hadPreference = prefs.contains(key)
+        val previous = prefs.getBoolean(key, false)
         setField("settingsMenuCategoryKey", "vehicle")
-        assertFalse(CarHotspotSetup.isBydHeadUnit(activity))
-        val otherMenu = invoke("buildSettingsMenu") as View
-        assertFalse(views(otherMenu).filterIsInstance<Switch>().any { it.contentDescription == description })
-        shadowOf(activity.packageManager).installPackage(PackageInfo().apply {
-            packageName = "com.byd.carsettings"
-            applicationInfo = ApplicationInfo().apply {
-                packageName = "com.byd.carsettings"
-                flags = ApplicationInfo.FLAG_SYSTEM
+        try {
+            for (bydPackagePresent in listOf(false, true)) {
+                if (bydPackagePresent) {
+                    shadowOf(activity.packageManager).installPackage(PackageInfo().apply {
+                        packageName = "com.byd.carsettings"
+                        applicationInfo = ApplicationInfo().apply {
+                            packageName = "com.byd.carsettings"
+                            flags = ApplicationInfo.FLAG_SYSTEM
+                        }
+                    })
+                }
+                // Package names and Android versions must never override the Geely product boundary.
+                assertFalse(CarHotspotSetup.isBydHeadUnit(activity))
+                for (staleOptIn in listOf(false, true)) {
+                    prefs.edit().putBoolean(key, staleOptIn).commit()
+                    invoke("loadPersistedSettings")
+                    val menu = invoke("buildSettingsMenu") as View
+                    assertFalse(views(menu).filterIsInstance<Switch>()
+                        .any { it.contentDescription == description })
+                    invoke("updateCallPopupGuard")
+                    assertEquals("OFF", com.shilapi.xcertplay.hud.BydCallPopupGuard.status)
+                    // Retain stored data without letting it activate the unsupported backend.
+                    assertTrue(prefs.contains(key))
+                    assertEquals(staleOptIn, prefs.getBoolean(key, !staleOptIn))
+                }
             }
-        })
-        assertTrue(CarHotspotSetup.isBydHeadUnit(activity))
-        val bydMenu = invoke("buildSettingsMenu") as View
-        assertEquals(Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q,
-            views(bydMenu).filterIsInstance<Switch>().any { it.contentDescription == description })
+        } finally {
+            val edit = prefs.edit()
+            if (hadPreference) edit.putBoolean(key, previous) else edit.remove(key)
+            edit.commit()
+        }
     }
 
     @Test fun disabledGesturePersistsAndDoesNotOpenTheMenu() {
